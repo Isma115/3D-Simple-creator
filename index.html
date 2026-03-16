@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple 3D Creator</title>
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- UI Overlay -->
+  <div id="ui-overlay" class="glass-panel">
+    <h1>Simple 3D Creator</h1>
+    <p class="subtitle">Dibuja en 3D usando las flechas del teclado.</p>
+    
+    <div class="instructions">
+      <div class="instruction-item">
+        <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd>
+        <span>Dibujar líneas intuitivamente</span>
+      </div>
+      <div class="instruction-item">
+        <span class="icon">🖱️</span>
+        <span>Arrastra para rotar la vista</span>
+      </div>
+      <div class="instruction-item">
+        <span class="icon">🖱️+Shift</span>
+        <span>Arrastra para desplazar la vista</span>
+      </div>
+      <div class="instruction-item">
+        <span class="icon">🎡</span>
+        <span>Rueda para hacer zoom</span>
+      </div>
+    </div>
+    <div class="status">
+      Coordenadas: <span id="coordinates-display">X: 0, Y: 0, Z: 0</span>
+    </div>
+  </div>
+
+  <!-- Import maps polyfill for ES modules (required by Three.js OrbitControls sometimes) -->
+  <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <!-- Main logic -->
+  <script type="module" src="script.js"></script>
+</body>
+</html>
