@@ -14,11 +14,18 @@ body {
 }
 
 /* UI Overlay - Glassmorphism Aesthetic */
-#ui-overlay {
+#ui-stack {
   position: absolute;
   top: 20px;
   left: 20px;
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+
+#ui-overlay {
   background: rgba(30, 30, 35, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -29,6 +36,70 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   pointer-events: none; /* Let clicks pass through to the canvas */
 }
+
+.actions-panel {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.control-panel {
+  background: rgba(10, 10, 10, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.control-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.radio-option input[type='radio'] {
+  accent-color: #ff8a00;
+}
+
+.action-button {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, rgba(255, 153, 51, 0.9), rgba(255, 94, 0, 0.9));
+  color: #1a1a1a;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.action-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  filter: brightness(1.05);
+}
+
+.action-button:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
 
 h1 {
   font-size: 1.5rem;
@@ -46,6 +117,36 @@ h1 {
   color: #aaa;
   margin-bottom: 24px;
   line-height: 1.4;
+}
+
+.stats-panel {
+  margin-bottom: 20px;
+  padding: 10px 12px;
+  background: rgba(10, 10, 10, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  display: grid;
+  gap: 6px;
+  max-width: 220px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+}
+
+.stat-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.stat-value {
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+  min-width: 24px;
+  text-align: right;
 }
 
 .instructions {

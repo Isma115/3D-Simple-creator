@@ -15,30 +15,53 @@
 <body>
 
   <!-- UI Overlay -->
-  <div id="ui-overlay" class="glass-panel">
-    <h1>Simple 3D Creator</h1>
-    <p class="subtitle">Dibuja en 3D usando las flechas del teclado.</p>
-    
-    <div class="instructions">
-      <div class="instruction-item">
-        <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd>
-        <span>Dibujar líneas intuitivamente</span>
+  <div id="ui-stack">
+    <div id="ui-overlay" class="glass-panel">
+      <h1>Simple 3D Creator</h1>
+      <p class="subtitle">Dibuja en 3D usando las flechas del teclado.</p>
+
+      <div id="stats-panel" class="stats-panel">
+        <div class="stat-row">
+          <span class="stat-label">Caras</span>
+          <span id="stat-faces" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Vertices</span>
+          <span id="stat-vertices" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Puntos</span>
+          <span id="stat-points" class="stat-value">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Lineas</span>
+          <span id="stat-lines" class="stat-value">0</span>
+        </div>
       </div>
-      <div class="instruction-item">
-        <span class="icon">🖱️</span>
-        <span>Arrastra para rotar la vista</span>
-      </div>
-      <div class="instruction-item">
-        <span class="icon">🖱️+Shift</span>
-        <span>Arrastra para desplazar la vista</span>
-      </div>
-      <div class="instruction-item">
-        <span class="icon">🎡</span>
-        <span>Rueda para hacer zoom</span>
+      <div class="status">
+        Coordenadas: <span id="coordinates-display">X: 0, Y: 0, Z: 0</span>
       </div>
     </div>
-    <div class="status">
-      Coordenadas: <span id="coordinates-display">X: 0, Y: 0, Z: 0</span>
+
+    <div id="ui-actions" class="actions-panel">
+      <div class="control-panel">
+        <div class="control-title">Tipo de control</div>
+        <label class="radio-option">
+          <input type="radio" name="control-mode" value="lines" checked>
+          <span>Lineas</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="control-mode" value="blocks-keyboard">
+          <span>Bloques (teclado)</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="control-mode" value="blocks-mouse">
+          <span>Bloques (raton)</span>
+        </label>
+      </div>
+      <button id="cleanup-lines-button" class="action-button" type="button">
+        Eliminar lineas sin cara
+      </button>
     </div>
   </div>
 
