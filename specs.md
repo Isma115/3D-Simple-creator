@@ -35,7 +35,7 @@
 
 [COMPLETADA] Añadir una opción "puntos" el cual permita seleccionar uno de los puntos del modelo 3D y con el click izquierdo con la tecla mayusculas sostenida arrastrarlo hacia afuera o hacia adentro
 
-[TAREA] Al tener seleccionada la opción de "puntos" en los radio buttons, al tener seleccionado uno de los puntos disponibles del modelo 3D no permite estirar o contraer su geometría
+[TAREA] Al tener seleccionada la opción de "puntos" en los radio buttons, al tener seleccionado un o de los puntos disponibles del modelo 3D no permite estirar o contraer su geometría
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 

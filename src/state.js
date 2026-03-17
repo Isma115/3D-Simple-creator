@@ -68,6 +68,7 @@ export function createState(scene) {
         looseFaceVertices: new Map(),
         looseFaceMeshes: new Map(),
         selectedEntry: null,
+        selectedPointKeys: [],
         hoveredEntry: null,
         controlMode: 'lines',
         selectedBlock: null,

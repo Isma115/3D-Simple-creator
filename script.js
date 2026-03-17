@@ -39,7 +39,9 @@ const updateUI = () => {
     const visibleVertices = state.controlMode === 'points'
         ? new Set(state.vertexPositions.keys())
         : computeVisibleVertices(state);
+    entryManager.applyLooseFaceVisibility(state.looseFaceVertices);
     entryManager.applyVisibleVertices(visibleVertices, state.controlMode === 'points');
+    ui.setClearPointSelectionEnabled(state.controlMode === 'lines' && state.selectedPointKeys.length > 0);
     ui.update({ position: state.currentPosition, stats: computeStats(state, entryManager, visibleVertices) });
 };
 
@@ -86,8 +88,11 @@ const selectionManager = attachSelection({
     onUpdate: updateUI,
     scene,
     graphManager,
-    faceController
+    faceController,
+    undoManager
 });
+
+ui.onClearPointSelection(() => selectionManager.clearPointSelection());
 
 attachMouseBlockControls({
     camera,

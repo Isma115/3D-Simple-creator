@@ -1,22 +1,54 @@
 import * as THREE from 'three';
-import { getBestAxis, getVertexKey, getEdgePlaneCandidates, getPlaneKey } from './geometry.js';
+import { getBestAxis, getVertexKey, getEdgePlaneCandidates, getPlaneKey, pointsEqual } from './geometry.js';
 import { FACE_EPSILON, STEP_SIZE } from './constants.js';
+import { drawLineBetweenPoints } from './input.js';
 
-export function attachSelection({ camera, renderer, entryManager, blockManager, state, onUpdate, scene, graphManager, faceController }) {
+export function attachSelection({ camera, renderer, entryManager, blockManager, state, onUpdate, scene, graphManager, faceController, undoManager }) {
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+    const mouseScreen = new THREE.Vector2();
+    const projectedPoint = new THREE.Vector3();
+    const POINT_HOVER_RADIUS_PX = 18;
     let hoveredEntry = null;
     let hoveredBlock = null;
     const gridHoverMesh = new THREE.Mesh(state.pointGeometry, state.pointMaterial.clone());
     gridHoverMesh.renderOrder = 2;
     gridHoverMesh.visible = false;
     scene.add(gridHoverMesh);
+    const previewLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+        state.lineMaterial.clone()
+    );
+    previewLine.material.transparent = true;
+    previewLine.material.opacity = 0.7;
+    previewLine.renderOrder = 1;
+    previewLine.visible = false;
+    scene.add(previewLine);
+    const previewStartMesh = new THREE.Mesh(state.pointGeometry, state.pointMaterial.clone());
+    previewStartMesh.renderOrder = 2;
+    previewStartMesh.visible = false;
+    previewStartMesh.scale.setScalar(1.35);
+    scene.add(previewStartMesh);
+    const previewEndMesh = new THREE.Mesh(state.pointGeometry, state.pointMaterial.clone());
+    previewEndMesh.renderOrder = 2;
+    previewEndMesh.visible = false;
+    previewEndMesh.scale.setScalar(1.35);
+    scene.add(previewEndMesh);
+    const joinMenu = document.createElement('div');
+    joinMenu.className = 'context-menu';
+    joinMenu.style.display = 'none';
+    const joinAction = document.createElement('button');
+    joinAction.type = 'button';
+    joinAction.textContent = 'Unir';
+    joinMenu.appendChild(joinAction);
+    document.body.appendChild(joinMenu);
     const DRAG_SCALE = STEP_SIZE / 50;
     let dragState = null;
     let suppressClick = false;
 
     function updateMouse(event) {
         const rect = renderer.domElement.getBoundingClientRect();
+        mouseScreen.set(event.clientX - rect.left, event.clientY - rect.top);
         mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     }
@@ -27,9 +59,29 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         const meshes = entries.map((entry) => entry.mesh);
         raycaster.setFromCamera(mouse, camera);
         const hits = raycaster.intersectObjects(meshes, false);
-        if (hits.length === 0) return null;
-        const entry = entryManager.getEntryByMesh(hits[0].object);
-        return entry ?? null;
+        if (hits.length > 0) {
+            const entry = entryManager.getEntryByMesh(hits[0].object);
+            if (entry) return entry;
+        }
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        let closestEntry = null;
+        let closestDistanceSq = POINT_HOVER_RADIUS_PX * POINT_HOVER_RADIUS_PX;
+
+        for (const entry of entries) {
+            projectedPoint.copy(entry.position).project(camera);
+            if (projectedPoint.z < -1 || projectedPoint.z > 1) continue;
+            const screenX = ((projectedPoint.x + 1) * 0.5) * rect.width;
+            const screenY = ((1 - projectedPoint.y) * 0.5) * rect.height;
+            const dx = screenX - mouseScreen.x;
+            const dy = screenY - mouseScreen.y;
+            const distanceSq = dx * dx + dy * dy;
+            if (distanceSq > closestDistanceSq) continue;
+            closestDistanceSq = distanceSq;
+            closestEntry = entry;
+        }
+
+        return closestEntry;
     }
 
     function pickBlockEntry() {
@@ -116,6 +168,65 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         hoveredEntry = nextEntry;
         state.hoveredEntry = hoveredEntry;
         if (hoveredEntry) entryManager.setHovered(hoveredEntry, true);
+    }
+
+    function hideLinePreview() {
+        previewLine.visible = false;
+        previewStartMesh.visible = false;
+        previewEndMesh.visible = false;
+    }
+
+    function showJoinMenu(x, y) {
+        joinMenu.style.left = `${x}px`;
+        joinMenu.style.top = `${y}px`;
+        joinMenu.style.display = 'block';
+    }
+
+    function hideJoinMenu() {
+        joinMenu.style.display = 'none';
+    }
+
+    function getEntryKey(entry) {
+        if (!entry) return null;
+        return entry.vertexKey ?? getVertexKey(entry.position);
+    }
+
+    function getPointPositionByKey(key) {
+        if (!key) return null;
+        const statePosition = state.vertexPositions.get(key);
+        if (statePosition) return statePosition;
+        const entries = entryManager.getPointEntriesByKey(key);
+        for (const entry of entries) {
+            if (entry.active) return entry.position;
+        }
+        return null;
+    }
+
+    function getPreviewOrigin() {
+        if (state.controlMode !== 'lines') return null;
+        const lastSelectedKey = state.selectedPointKeys[state.selectedPointKeys.length - 1];
+        if (lastSelectedKey) {
+            return getPointPositionByKey(lastSelectedKey);
+        }
+        if (state.selectedEntry?.position) {
+            return state.selectedEntry.position;
+        }
+        return state.currentPosition;
+    }
+
+    function handleLinePreview(targetPosition) {
+        const origin = getPreviewOrigin();
+        if (!origin || !targetPosition || pointsEqual(origin, targetPosition)) {
+            hideLinePreview();
+            return;
+        }
+        previewLine.geometry.setFromPoints([origin, targetPosition]);
+        previewLine.geometry.computeBoundingSphere();
+        previewStartMesh.position.copy(origin);
+        previewEndMesh.position.copy(targetPosition);
+        previewLine.visible = true;
+        previewStartMesh.visible = true;
+        previewEndMesh.visible = true;
     }
 
     function pickFace() {
@@ -380,16 +491,89 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (hoveredBlock) blockManager.setHovered(hoveredBlock, true);
     }
 
+    function clearActiveSelectedEntry() {
+        if (!state.selectedEntry) return;
+        entryManager.setSelected(state.selectedEntry, false);
+        state.selectedEntry = null;
+    }
+
+    function clearSelectedPointKeys() {
+        for (const key of state.selectedPointKeys) {
+            entryManager.setMultiSelectedByKey(key, false);
+        }
+        state.selectedPointKeys = [];
+    }
+
+    function clearPointSelection({ clearActive = true, notify = true } = {}) {
+        clearSelectedPointKeys();
+        if (clearActive) {
+            clearActiveSelectedEntry();
+        }
+        hideJoinMenu();
+        hideLinePreview();
+        if (notify) {
+            onUpdate();
+        }
+    }
+
+    function addPointToSelection(entry) {
+        const key = getEntryKey(entry);
+        if (!key) return;
+        if (!state.selectedPointKeys.includes(key)) {
+            state.selectedPointKeys.push(key);
+            entryManager.setMultiSelectedByKey(key, true);
+        }
+    }
+
+    function joinSelectedPoints() {
+        if (state.controlMode !== 'lines') return false;
+        const selectedPositions = state.selectedPointKeys
+            .map((key) => ({ key, position: getPointPositionByKey(key) }))
+            .filter((item) => item.position);
+        if (selectedPositions.length < 2) return false;
+
+        let createdAny = false;
+        for (let i = 0; i < selectedPositions.length - 1; i++) {
+            const startItem = selectedPositions[i];
+            const endItem = selectedPositions[i + 1];
+            const pathBeforeOverride = selectedPositions
+                .slice(0, i + 1)
+                .map((item) => item.position.clone());
+            const created = drawLineBetweenPoints({
+                state,
+                entryManager,
+                faceController,
+                graphManager,
+                blockManager,
+                undoManager,
+                onUpdate,
+                startPoint: startItem.position,
+                endPoint: endItem.position,
+                pathBeforeOverride
+            });
+            if (created) {
+                createdAny = true;
+            }
+        }
+
+        hideJoinMenu();
+        handleLinePreview(getPointPositionByKey(state.selectedPointKeys[state.selectedPointKeys.length - 1]));
+        return createdAny;
+    }
+
     function handleSelect(entry) {
         if (state.selectedEntry && state.selectedEntry !== entry) {
             entryManager.setSelected(state.selectedEntry, false);
         }
         state.selectedEntry = entry;
         if (state.selectedEntry) {
+            const preservePath = state.controlMode === 'lines' && pointsEqual(state.currentPosition, state.selectedEntry.position);
             entryManager.setSelected(state.selectedEntry, true);
             state.currentPosition.copy(state.selectedEntry.position);
             state.cursorMesh.position.copy(state.currentPosition);
-            state.pathPoints = [state.currentPosition.clone()];
+            if (!preservePath) {
+                state.pathPoints = [state.currentPosition.clone()];
+            }
             onUpdate();
         }
     }
@@ -419,10 +603,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function handleGridSelect(position) {
-        if (state.selectedEntry) {
-            entryManager.setSelected(state.selectedEntry, false);
-            state.selectedEntry = null;
-        }
+        clearActiveSelectedEntry();
         if (!position) return;
         state.currentPosition.copy(position);
         state.cursorMesh.position.copy(state.currentPosition);
@@ -633,6 +814,8 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleBlockHover(null);
             handleHover(null);
             handleGridHover(null);
+            hideJoinMenu();
+            hideLinePreview();
             return;
         }
 
@@ -642,6 +825,8 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleBlockHover(null);
             handleGridHover(null);
             handleFaceHover(null);
+            hideJoinMenu();
+            hideLinePreview();
             return;
         }
 
@@ -651,6 +836,8 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleHover(null);
             handleGridHover(null);
             handleFaceHover(null);
+            hideJoinMenu();
+            hideLinePreview();
             return;
         }
         const entry = pickEntry(true);
@@ -658,12 +845,14 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleHover(entry);
             handleGridHover(null);
             handleFaceHover(null);
+            handleLinePreview(entry.position);
             return;
         }
         handleHover(null);
         handleFaceHover(null);
         const gridPoint = pickGridPoint();
         handleGridHover(gridPoint);
+        handleLinePreview(gridPoint);
     }
 
     function onClick(event) {
@@ -674,12 +863,16 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         }
         
         if (state.controlMode === 'select-face') {
+            hideJoinMenu();
+            hideLinePreview();
             const face = pickFace();
             handleFaceSelect(face);
             return;
         }
 
         if (state.controlMode === 'points') {
+            hideJoinMenu();
+            hideLinePreview();
             const entry = pickEntry(true);
             handleSelect(entry);
             handleGridHover(null);
@@ -688,6 +881,8 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         }
 
         if (state.controlMode === 'blocks-keyboard') {
+            hideJoinMenu();
+            hideLinePreview();
             const blockEntry = pickBlockEntry();
             handleBlockSelect(blockEntry);
             handleBlockHover(null);
@@ -695,19 +890,56 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             return;
         }
         if (state.controlMode === 'blocks-mouse') {
+            hideJoinMenu();
+            hideLinePreview();
             handleBlockHover(null);
             handleGridHover(null);
             return;
         }
         const entry = pickEntry(true);
-        if (entry) {
+        if (event.shiftKey) {
+            if (!entry) {
+                hideJoinMenu();
+                return;
+            }
+            addPointToSelection(entry);
             handleSelect(entry);
             handleGridHover(null);
+            handleLinePreview(entry.position);
             return;
         }
+        if (entry) {
+            hideJoinMenu();
+            handleSelect(entry);
+            handleGridHover(null);
+            handleLinePreview(entry.position);
+            return;
+        }
+        hideJoinMenu();
         const gridPoint = pickGridPoint();
         handleGridSelect(gridPoint);
         handleGridHover(null);
+        handleLinePreview(gridPoint);
+    }
+
+    function onContextMenu(event) {
+        if (state.controlMode !== 'lines') {
+            hideJoinMenu();
+            return;
+        }
+        if (state.selectedPointKeys.length < 2) {
+            hideJoinMenu();
+            event.preventDefault();
+            return;
+        }
+        event.preventDefault();
+        showJoinMenu(event.clientX + 6, event.clientY + 6);
+    }
+
+    function onDocumentPointerDown(event) {
+        if (joinMenu.style.display === 'none') return;
+        if (joinMenu.contains(event.target)) return;
+        hideJoinMenu();
     }
 
     function onPointerDown(event) {
@@ -734,15 +966,23 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('click', onClick);
+    renderer.domElement.addEventListener('contextmenu', onContextMenu);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+
+    joinAction.addEventListener('click', () => {
+        if (!joinSelectedPoints()) {
+            hideJoinMenu();
+        }
+    });
 
     return {
         clearSelection: () => {
             if (hoveredEntry) entryManager.setHovered(hoveredEntry, false);
-            if (state.selectedEntry) entryManager.setSelected(state.selectedEntry, false);
+            clearActiveSelectedEntry();
+            clearSelectedPointKeys();
             hoveredEntry = null;
-            state.selectedEntry = null;
             state.hoveredEntry = null;
             if (blockManager) {
                 if (hoveredBlock) blockManager.setHovered(hoveredBlock, false);
@@ -751,9 +991,14 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
                 state.selectedBlock = null;
                 state.hoveredBlock = null;
             }
+            hideJoinMenu();
             handleFaceSelect(null);
             handleFaceHover(null);
             gridHoverMesh.visible = false;
+            hideLinePreview();
+        },
+        clearPointSelection: () => {
+            clearPointSelection();
         },
         applyTextureToSelected: (texture) => {
             if (!state.selectedFace) return;

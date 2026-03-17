@@ -5,6 +5,7 @@ export function createUI() {
     const pointsValue = document.getElementById('stat-points');
     const linesValue = document.getElementById('stat-lines');
     const cleanupButton = document.getElementById('cleanup-lines-button');
+    const clearPointSelectionButton = document.getElementById('clear-point-selection-button');
     const controlModeInputs = Array.from(document.querySelectorAll('input[name="control-mode"]'));
 
     function update({ position, stats }) {
@@ -20,6 +21,11 @@ export function createUI() {
     function onCleanupLines(handler) {
         if (!cleanupButton) return;
         cleanupButton.addEventListener('click', handler);
+    }
+
+    function onClearPointSelection(handler) {
+        if (!clearPointSelectionButton) return;
+        clearPointSelectionButton.addEventListener('click', handler);
     }
 
     function onControlModeChange(handler) {
@@ -45,5 +51,18 @@ export function createUI() {
         }
     }
 
-    return { update, onCleanupLines, onControlModeChange, setControlMode, showTextureManager };
+    function setClearPointSelectionEnabled(enabled) {
+        if (!clearPointSelectionButton) return;
+        clearPointSelectionButton.disabled = !enabled;
+    }
+
+    return {
+        update,
+        onCleanupLines,
+        onClearPointSelection,
+        onControlModeChange,
+        setControlMode,
+        showTextureManager,
+        setClearPointSelectionEnabled
+    };
 }

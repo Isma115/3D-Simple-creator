@@ -10,6 +10,7 @@ export function createEntryManager(scene, planeFill) {
     const POINT_VISIBLE_OPACITY = 1.0;
     const HOVER_SCALE = 1.6;
     const SELECT_SCALE = 1.9;
+    const LOOSE_FACE_COVER_PREFIX = 'loose-face:';
 
     function addEntryToScene(entry) {
         if (!entry.inScene) {
@@ -27,13 +28,14 @@ export function createEntryManager(scene, planeFill) {
 
     function updatePointAppearance(entry) {
         const material = entry.mesh.material;
+        const highlighted = entry.hovered || entry.selected || entry.multiSelected;
         if (material) {
             material.transparent = true;
-            material.opacity = entry.active && entry.faceEligible && (entry.showAlways || entry.hovered || entry.selected)
+            material.opacity = entry.active && (entry.faceEligible || highlighted) && (entry.showAlways || highlighted)
                 ? POINT_VISIBLE_OPACITY
                 : POINT_HIDDEN_OPACITY;
         }
-        const scale = entry.selected ? SELECT_SCALE : entry.hovered ? HOVER_SCALE : 1;
+        const scale = entry.selected || entry.multiSelected ? SELECT_SCALE : entry.hovered ? HOVER_SCALE : 1;
         entry.mesh.scale.setScalar(scale);
         entry.mesh.visible = entry.active;
     }
@@ -79,6 +81,7 @@ export function createEntryManager(scene, planeFill) {
             faceEligible: false,
             hovered: false,
             selected: false,
+            multiSelected: false,
             showAlways: false,
             vertexKey: vertexKey ?? null,
             isPoint: true,
@@ -100,6 +103,10 @@ export function createEntryManager(scene, planeFill) {
         const parts = planeKey.split(':');
         if (parts.length !== 2) return null;
         return { axis: parts[0], value: Number(parts[1]) };
+    }
+
+    function buildEdgeKey(aKey, bKey) {
+        return aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
     }
 
     function isLineOnPlane(entry, axis, value) {
@@ -191,6 +198,46 @@ export function createEntryManager(scene, planeFill) {
         }
     }
 
+    function applyLooseFaceVisibility(looseFaceVertices) {
+        const looseFaceEdgeCoverage = new Map();
+
+        if (looseFaceVertices) {
+            for (const [faceKey, vertices] of looseFaceVertices.entries()) {
+                if (!vertices || vertices.length < 2) continue;
+                const coverageKey = `${LOOSE_FACE_COVER_PREFIX}${faceKey}`;
+                for (let i = 0; i < vertices.length; i++) {
+                    const aKey = vertices[i];
+                    const bKey = vertices[(i + 1) % vertices.length];
+                    if (!aKey || !bKey || aKey === bKey) continue;
+                    looseFaceEdgeCoverage.set(buildEdgeKey(aKey, bKey), coverageKey);
+                }
+            }
+        }
+
+        for (const entry of lineEntries) {
+            const staleCoverage = [];
+            for (const key of entry.coveredBy) {
+                if (key.startsWith(LOOSE_FACE_COVER_PREFIX)) {
+                    staleCoverage.push(key);
+                }
+            }
+            for (const key of staleCoverage) {
+                entry.coveredBy.delete(key);
+            }
+
+            const aKey = entry.aKey;
+            const bKey = entry.bKey;
+            if (aKey && bKey) {
+                const coverageKey = looseFaceEdgeCoverage.get(buildEdgeKey(aKey, bKey));
+                if (coverageKey) {
+                    entry.coveredBy.add(coverageKey);
+                }
+            }
+
+            refreshEntryVisibility(entry);
+        }
+    }
+
     function applyVisibleVertices(visibleSet, showPoints = true) {
         for (const [vertexKey, entries] of pointEntriesByKey.entries()) {
             const eligible = showPoints ? true : visibleSet.has(vertexKey);
@@ -200,6 +247,7 @@ export function createEntryManager(scene, planeFill) {
                     entry.faceEligible = false;
                     entry.hovered = false;
                     entry.selected = false;
+                    entry.multiSelected = false;
                     refreshEntryVisibility(entry);
                     continue;
                 }
@@ -227,6 +275,16 @@ export function createEntryManager(scene, planeFill) {
         if (!entry || !entry.isPoint) return;
         entry.selected = selected;
         refreshEntryVisibility(entry);
+    }
+
+    function setMultiSelectedByKey(key, selected) {
+        if (!key) return;
+        const entries = pointEntriesByKey.get(key);
+        if (!entries) return;
+        for (const entry of entries) {
+            entry.multiSelected = selected;
+            refreshEntryVisibility(entry);
+        }
     }
 
     function getPointEntries() {
@@ -275,9 +333,11 @@ export function createEntryManager(scene, planeFill) {
         registerPointEntry,
         refreshEntryVisibility,
         updatePlaneVisibility,
+        applyLooseFaceVisibility,
         applyVisibleVertices,
         setHovered,
         setSelected,
+        setMultiSelectedByKey,
         getPointEntries,
         getLineEntries,
         getEntryByMesh,

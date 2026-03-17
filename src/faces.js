@@ -117,6 +117,24 @@ function polygonToCells(polygon) {
     return cells;
 }
 
+function isOrthogonalPlanePolygon(points, axis) {
+    const projected = projectPointsToPlane(points, axis);
+    if (projected.length < 2) return false;
+    for (let i = 0; i < projected.length; i++) {
+        const current = projected[i];
+        const next = projected[(i + 1) % projected.length];
+        const dx = Math.abs(next.x - current.x);
+        const dy = Math.abs(next.y - current.y);
+        if (dx <= FACE_EPSILON && dy <= FACE_EPSILON) {
+            continue;
+        }
+        if (dx > FACE_EPSILON && dy > FACE_EPSILON) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function buildPlaneMesh(axis, value, cells, faceMaterial) {
     if (!cells || cells.size === 0) return null;
     const positions = [];
@@ -432,6 +450,10 @@ export function createFaceController({
     function processLoopFace(points, planeKeyHint) {
         const planeInfo = getAxisAlignedPlane(points);
         if (planeInfo) {
+            if (!isOrthogonalPlanePolygon(points, planeInfo.axis)) {
+                const planeKey = getPlaneKey(planeInfo.axis, planeInfo.value);
+                return createLooseFace(points, planeKey);
+            }
             return createPlaneFace(points, planeInfo);
         }
         return createLooseFace(points, planeKeyHint);
