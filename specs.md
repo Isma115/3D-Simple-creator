@@ -33,7 +33,9 @@
 [COMPLETADA] Añade una opción en los radio button que sea seleccionar cara, y al hacer click sobre una cara aparezca una opción de "Aplicar textura", va a existir una lista de texturas (con previsualización) que se van a poder cargar (o eliminar) y al hacer click sobre aplicar textura teniendo seleccionada una cara del modelo 3D se aplicará la textura a esa cara. 
 
 
-[TAREA] Añadir una opción "puntos" el cual permita seleccionar uno de los puntos del modelo 3D y con el click izquierdo con la tecla mayusculas sostenida arrastrarlo hacia afuera o hacia adentro
+[COMPLETADA] Añadir una opción "puntos" el cual permita seleccionar uno de los puntos del modelo 3D y con el click izquierdo con la tecla mayusculas sostenida arrastrarlo hacia afuera o hacia adentro
+
+[TAREA] Al tener seleccionada la opción de "puntos" en los radio buttons, al tener seleccionado uno de los puntos disponibles del modelo 3D no permite estirar o contraer su geometría
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 

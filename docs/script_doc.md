@@ -15,7 +15,7 @@ Este archivo es el "director de orquesta". No dibuja nada por si mismo, sino que
 - Conecta el boton de limpieza con `createCleanupManager` para eliminar lineas sin cara.
 - Inicia el bucle de animacion con `requestAnimationFrame`.
 - En cada actualizacion recalcula los vertices visibles y puede ocultar los puntos para dejar solo la rejilla visual.
-- Conecta los radio buttons del tipo de control para alternar entre dibujo normal, bloques con teclado o bloques con raton y limpiar selecciones.
+- Conecta los radio buttons del tipo de control para alternar entre dibujo normal, modo puntos, bloques con teclado o bloques con raton y limpiar selecciones.
 - Arranca el envio de heartbeats para el cierre automatico del servidor.
 
 Este archivo queda deliberadamente pequeno y declarativo para evitar que la logica principal vuelva a mezclarse en un solo bloque.

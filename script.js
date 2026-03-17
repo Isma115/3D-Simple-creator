@@ -23,7 +23,7 @@ const textureManager = createTextureManager();
 
 
 const entryManager = createEntryManager(scene, state.planeFill);
-const blockManager = createBlockManager({ scene, state });
+const blockManager = createBlockManager({ scene, state, entryManager });
 const graphManager = createGraphManager(state.planeGraphs);
 const faceController = createFaceController({
     scene,
@@ -36,8 +36,10 @@ const faceController = createFaceController({
     entryManager
 });
 const updateUI = () => {
-    const visibleVertices = computeVisibleVertices(state);
-    entryManager.applyVisibleVertices(visibleVertices, false);
+    const visibleVertices = state.controlMode === 'points'
+        ? new Set(state.vertexPositions.keys())
+        : computeVisibleVertices(state);
+    entryManager.applyVisibleVertices(visibleVertices, state.controlMode === 'points');
     ui.update({ position: state.currentPosition, stats: computeStats(state, entryManager, visibleVertices) });
 };
 
@@ -82,7 +84,9 @@ const selectionManager = attachSelection({
     blockManager,
     state,
     onUpdate: updateUI,
-    scene
+    scene,
+    graphManager,
+    faceController
 });
 
 attachMouseBlockControls({

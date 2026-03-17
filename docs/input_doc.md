@@ -8,9 +8,9 @@ Este modulo escucha las teclas de flechas para dibujar o colocar cubos con tecla
 - Interpreta flechas en funcion de la orientacion de la camara.
 - En modo normal crea nuevas lineas y puntos, registra acciones y actualiza la UI.
 - En modo bloques con teclado crea cubos alineados a la rejilla segun el tamano del cubo seleccionado y actualiza la posicion del cursor sin tocar la logica de caras.
-- En modo bloques con raton ignora las flechas para que el control sea exclusivamente con clicks.
+    - En modo bloques con raton y en modo puntos ignora las flechas para que el control sea exclusivamente con clicks/arrastre.
 - Detecta bucles para generar caras mediante `faceController`.
 - Invoca `undoManager` cuando el usuario pulsa Ctrl/Command + Z o Y.
-- Atiende `Delete` o `Backspace` para eliminar el vertice seleccionado (o el punto bajo el cursor) en modo normal, y para borrar el cubo seleccionado en modo bloques, registrando todo como una accion deshacer/rehacer.
+- Atiende `Delete` o `Backspace` para eliminar el vertice seleccionado (o el punto bajo el cursor) en modo lineas o puntos, y para borrar el cubo seleccionado en modo bloques, registrando todo como una accion deshacer/rehacer.
 
 Mantener esta logica separada evita mezclar input con renderizado.

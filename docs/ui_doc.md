@@ -4,7 +4,7 @@
 Esta es la "cara" de la aplicación, lo primero que ves cuando abres la página. Consiste en:
 - **Un lienzo en blanco** (que en realidad es oscuro) que ocupa toda tu pantalla preparándolo todo para que dibujes.
  - **Un panel flotante semitransparente** en la esquina superior izquierda. Ahora muestra un cuadro pequeño con estadísticas del modelo (caras, vértices, puntos y líneas) y las coordenadas actuales.
- - **Un grupo de radio buttons** para elegir el tipo de control (líneas, bloques con teclado, bloques con ratón o seleccionar cara).
+ - **Un grupo de radio buttons** para elegir el tipo de control (líneas, puntos, bloques con teclado, bloques con ratón o seleccionar cara).
  - **Un botón de limpieza** justo debajo, para eliminar líneas que no forman ninguna cara.
  - **Un panel del Gestor de Texturas**, que aparece oculto y solo se muestra cuando seleccionas la opción de control "Seleccionar cara". Ese panel permite cargar, seleccionar, aplicar y borrar texturas.
 Este panel está diseñado con un estilo "cristalino", lo que significa que parece un cristal borroso, lo cual le da un toque moderno y tecnológico sin tapar demasiado el dibujo que hay debajo.
@@ -26,5 +26,5 @@ La interfaz de usuario busca ser lo menos intrusiva posible priorizando el espac
   - Conjuntamente con un color de fondo `rgba` semitransparente e iluminación de bordes (`border: 1px solid rgba(255, 255, 255, 0.1)`), compone una superficie translúcida sobre el canvas subyacente de Three.js.
   - El panel de datos usa `pointer-events: none` para no bloquear los eventos del canvas, mientras el contenedor de acciones (`#ui-actions`) deja el botón interactivo.
 - **Textos y Degradados:** El texto principal `<h1>` aplica un degradado lineal mediante `background-clip: text` y propiedades de transparencia de texto webkit para lograr un acabado "Ciberpunk".
-- **Panel de acciones:** Se organiza un panel de radio buttons para elegir el control y un boton de limpieza debajo.
+- **Panel de acciones:** Se organiza un panel de radio buttons para elegir el control (incluye el modo puntos) y un boton de limpieza debajo.
 - **Panel de estadísticas:** Un cuadro pequeño con tipografía compacta para mostrar conteos.

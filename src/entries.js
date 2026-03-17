@@ -29,7 +29,7 @@ export function createEntryManager(scene, planeFill) {
         const material = entry.mesh.material;
         if (material) {
             material.transparent = true;
-            material.opacity = entry.active && entry.faceEligible && (entry.hovered || entry.selected)
+            material.opacity = entry.active && entry.faceEligible && (entry.showAlways || entry.hovered || entry.selected)
                 ? POINT_VISIBLE_OPACITY
                 : POINT_HIDDEN_OPACITY;
         }
@@ -66,7 +66,7 @@ export function createEntryManager(scene, planeFill) {
         return entry;
     }
 
-    function registerPointEntry(mesh, position, vertexKey) {
+    function registerPointEntry(mesh, position, vertexKey, source = 'line') {
         if (mesh.material && mesh.material.clone) {
             mesh.material = mesh.material.clone();
         }
@@ -79,8 +79,10 @@ export function createEntryManager(scene, planeFill) {
             faceEligible: false,
             hovered: false,
             selected: false,
+            showAlways: false,
             vertexKey: vertexKey ?? null,
-            isPoint: true
+            isPoint: true,
+            source
         };
         pointEntries.push(entry);
         meshToPointEntry.set(mesh, entry);
@@ -191,7 +193,7 @@ export function createEntryManager(scene, planeFill) {
 
     function applyVisibleVertices(visibleSet, showPoints = true) {
         for (const [vertexKey, entries] of pointEntriesByKey.entries()) {
-            const eligible = visibleSet.has(vertexKey);
+            const eligible = showPoints ? true : visibleSet.has(vertexKey);
             let shown = false;
             for (const entry of entries) {
                 if (!entry.active) {
@@ -206,7 +208,8 @@ export function createEntryManager(scene, planeFill) {
                     entry.hovered = false;
                     entry.selected = false;
                 }
-                if (showPoints && eligible && !shown) {
+                entry.showAlways = showPoints && eligible && !shown;
+                if (entry.showAlways) {
                     shown = true;
                 }
                 refreshEntryVisibility(entry);
@@ -238,6 +241,35 @@ export function createEntryManager(scene, planeFill) {
         return meshToPointEntry.get(mesh) ?? null;
     }
 
+    function getPointEntriesByKey(key) {
+        return pointEntriesByKey.get(key) ?? new Set();
+    }
+
+    function movePointEntries(oldKey, newKey, newPosition) {
+        if (!oldKey) return [];
+        const existing = pointEntriesByKey.get(oldKey);
+        if (!existing || existing.size === 0) return [];
+        const movedEntries = Array.from(existing);
+        if (oldKey !== newKey) {
+            pointEntriesByKey.delete(oldKey);
+            if (!pointEntriesByKey.has(newKey)) {
+                pointEntriesByKey.set(newKey, new Set());
+            }
+        }
+        const targetSet = pointEntriesByKey.get(newKey) ?? new Set();
+        for (const entry of movedEntries) {
+            entry.position.copy(newPosition);
+            entry.mesh.position.copy(newPosition);
+            entry.vertexKey = newKey;
+            targetSet.add(entry);
+            refreshEntryVisibility(entry);
+        }
+        if (oldKey !== newKey) {
+            pointEntriesByKey.set(newKey, targetSet);
+        }
+        return movedEntries;
+    }
+
     return {
         registerLineEntry,
         registerPointEntry,
@@ -249,6 +281,8 @@ export function createEntryManager(scene, planeFill) {
         getPointEntries,
         getLineEntries,
         getEntryByMesh,
+        getPointEntriesByKey,
+        movePointEntries,
         getCounts: () => {
             let lines = 0;
             for (const entry of lineEntries) {

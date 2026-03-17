@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { getBestAxis, getVertexKey, getEdgePlaneCandidates, getPlaneKey } from './geometry.js';
+import { FACE_EPSILON, STEP_SIZE } from './constants.js';
 
-export function attachSelection({ camera, renderer, entryManager, blockManager, state, onUpdate, scene }) {
+export function attachSelection({ camera, renderer, entryManager, blockManager, state, onUpdate, scene, graphManager, faceController }) {
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let hoveredEntry = null;
@@ -9,6 +11,9 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     gridHoverMesh.renderOrder = 2;
     gridHoverMesh.visible = false;
     scene.add(gridHoverMesh);
+    const DRAG_SCALE = STEP_SIZE / 50;
+    let dragState = null;
+    let suppressClick = false;
 
     function updateMouse(event) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -16,8 +21,8 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     }
 
-    function pickEntry() {
-        const entries = entryManager.getPointEntries().filter((entry) => entry.active && entry.faceEligible);
+    function pickEntry(includeHidden = false) {
+        const entries = entryManager.getPointEntries().filter((entry) => entry.active && (includeHidden || entry.faceEligible));
         if (entries.length === 0) return null;
         const meshes = entries.map((entry) => entry.mesh);
         raycaster.setFromCamera(mouse, camera);
@@ -425,8 +430,202 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         onUpdate();
     }
 
+    function updateLineGeometry(lineEntry) {
+        if (!lineEntry || !lineEntry.mesh) return;
+        lineEntry.mesh.geometry.setFromPoints([lineEntry.start, lineEntry.end]);
+        lineEntry.mesh.geometry.computeBoundingSphere();
+    }
+
+    function beginPointDrag(entry, event) {
+        if (!entry || !entry.active) return;
+        if (entry.source === 'block') return;
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+        const axis = getBestAxis(forward);
+        if (!axis) return;
+        const oldKey = entry.vertexKey ?? getVertexKey(entry.position);
+        const pointEntries = entryManager.getPointEntries().filter((item) => {
+            const key = item.vertexKey ?? getVertexKey(item.position);
+            return key === oldKey;
+        });
+        const lineSnapshots = [];
+        const lineEntries = entryManager.getLineEntries ? entryManager.getLineEntries() : [];
+        for (const lineEntry of lineEntries) {
+            if (!lineEntry.active) continue;
+            const aKey = lineEntry.aKey ?? getVertexKey(lineEntry.start);
+            const bKey = lineEntry.bKey ?? getVertexKey(lineEntry.end);
+            if (aKey !== oldKey && bKey !== oldKey) continue;
+            lineSnapshots.push({
+                entry: lineEntry,
+                start: lineEntry.start.clone(),
+                end: lineEntry.end.clone(),
+                aKey,
+                bKey,
+                isStart: aKey === oldKey,
+                isEnd: bKey === oldKey
+            });
+        }
+
+        dragState = {
+            oldKey,
+            startPos: entry.position.clone(),
+            startMouseY: event.clientY,
+            axis,
+            pointEntries,
+            lineSnapshots,
+            lastPos: entry.position.clone()
+        };
+    }
+
+    function updatePointDrag(event) {
+        if (!dragState) return;
+        const delta = event.clientY - dragState.startMouseY;
+        const newPos = dragState.startPos.clone().add(dragState.axis.clone().multiplyScalar(delta * DRAG_SCALE));
+        dragState.lastPos.copy(newPos);
+
+        for (const entry of dragState.pointEntries) {
+            entry.position.copy(newPos);
+            entry.mesh.position.copy(newPos);
+            entryManager.refreshEntryVisibility(entry);
+        }
+
+        for (const snapshot of dragState.lineSnapshots) {
+            if (snapshot.isStart) {
+                snapshot.entry.start.copy(newPos);
+            }
+            if (snapshot.isEnd) {
+                snapshot.entry.end.copy(newPos);
+            }
+            updateLineGeometry(snapshot.entry);
+        }
+    }
+
+    function finalizePointDrag() {
+        if (!dragState) return;
+        const oldKey = dragState.oldKey;
+        const oldPos = dragState.startPos.clone();
+        const newPos = dragState.lastPos.clone();
+        if (newPos.distanceToSquared(oldPos) < 1e-8) {
+            dragState = null;
+            return;
+        }
+        const newKey = getVertexKey(newPos);
+
+        entryManager.movePointEntries(oldKey, newKey, newPos);
+        if (oldKey !== newKey) {
+            state.vertexPositions.delete(oldKey);
+        }
+        state.vertexPositions.set(newKey, newPos.clone());
+
+        for (const [faceKey, vertices] of state.looseFaceVertices.entries()) {
+            if (!vertices.includes(oldKey)) continue;
+            const mesh = state.looseFaceMeshes.get(faceKey);
+            if (mesh) {
+                scene.remove(mesh);
+            }
+            state.faceRegistry.delete(faceKey);
+            state.looseFaceVertices.delete(faceKey);
+            state.looseFaceMeshes.delete(faceKey);
+        }
+
+        const planesToRemove = [];
+        for (const [planeKey, planeData] of state.planeFill.entries()) {
+            if (!planeData || !planeData.cells || planeData.cells.size === 0) continue;
+            const axis = planeData.axis;
+            const value = planeData.value;
+            if (Math.abs(oldPos[axis] - value) > FACE_EPSILON) continue;
+            let u;
+            let v;
+            if (axis === 'x') {
+                u = oldPos.y;
+                v = oldPos.z;
+            } else if (axis === 'y') {
+                u = oldPos.x;
+                v = oldPos.z;
+            } else {
+                u = oldPos.x;
+                v = oldPos.y;
+            }
+            const roundedU = Math.round(u);
+            const roundedV = Math.round(v);
+            const candidates = [
+                `${roundedU},${roundedV}`,
+                `${roundedU - 1},${roundedV}`,
+                `${roundedU},${roundedV - 1}`,
+                `${roundedU - 1},${roundedV - 1}`
+            ];
+            let present = 0;
+            for (const key of candidates) {
+                if (planeData.cells.has(key)) present += 1;
+            }
+            if (present === 0 || present === 4) continue;
+            planesToRemove.push({ planeKey, planeData });
+        }
+        for (const { planeKey, planeData } of planesToRemove) {
+            if (planeData.mesh) scene.remove(planeData.mesh);
+            if (planeData.gridLines) scene.remove(planeData.gridLines);
+            state.planeFill.delete(planeKey);
+        }
+
+        if (graphManager && faceController) {
+            for (const snapshot of dragState.lineSnapshots) {
+                const lineEntry = snapshot.entry;
+                const oldPlaneCandidates = getEdgePlaneCandidates(snapshot.start, snapshot.end);
+                for (const plane of oldPlaneCandidates) {
+                    const planeKey = getPlaneKey(plane.axis, plane.value);
+                    graphManager.removeEdge(planeKey, snapshot.aKey, snapshot.bKey);
+                }
+
+                const newAKey = snapshot.isStart ? newKey : snapshot.aKey;
+                const newBKey = snapshot.isEnd ? newKey : snapshot.bKey;
+                lineEntry.aKey = newAKey;
+                lineEntry.bKey = newBKey;
+
+                const newPlaneCandidates = getEdgePlaneCandidates(lineEntry.start, lineEntry.end);
+                for (const plane of newPlaneCandidates) {
+                    const planeKey = getPlaneKey(plane.axis, plane.value);
+                    graphManager.addEdge(planeKey, newAKey, newBKey);
+
+                    const path = graphManager.findPath(planeKey, newBKey, newAKey, newAKey, newBKey);
+                    if (path && path.length >= 3) {
+                        const loopKeys = [newAKey, ...path];
+                        if (loopKeys[loopKeys.length - 1] === newAKey) {
+                            loopKeys.pop();
+                        }
+                        const loopPoints = loopKeys
+                            .map((key) => state.vertexPositions.get(key))
+                            .filter(Boolean);
+                        if (loopPoints.length >= 3) {
+                            faceController.processLoopFace(loopPoints, planeKey);
+                        }
+                    }
+                }
+            }
+        }
+
+        const pointPlaneKeys = [
+            getPlaneKey('x', oldPos.x),
+            getPlaneKey('y', oldPos.y),
+            getPlaneKey('z', oldPos.z),
+            getPlaneKey('x', newPos.x),
+            getPlaneKey('y', newPos.y),
+            getPlaneKey('z', newPos.z)
+        ];
+        for (const planeKey of pointPlaneKeys) {
+            entryManager.updatePlaneVisibility(planeKey);
+        }
+
+        onUpdate();
+        dragState = null;
+    }
+
     function onMouseMove(event) {
         updateMouse(event);
+        if (dragState) {
+            event.preventDefault();
+            event.stopPropagation();
+            updatePointDrag(event);
+            return;
+        }
         
         if (state.controlMode === 'select-face') {
             const face = pickFace();
@@ -434,6 +633,15 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleBlockHover(null);
             handleHover(null);
             handleGridHover(null);
+            return;
+        }
+
+        if (state.controlMode === 'points') {
+            const entry = pickEntry(true);
+            handleHover(entry);
+            handleBlockHover(null);
+            handleGridHover(null);
+            handleFaceHover(null);
             return;
         }
 
@@ -445,7 +653,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleFaceHover(null);
             return;
         }
-        const entry = pickEntry();
+        const entry = pickEntry(true);
         if (entry) {
             handleHover(entry);
             handleGridHover(null);
@@ -460,10 +668,22 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
     function onClick(event) {
         updateMouse(event);
+        if (suppressClick) {
+            suppressClick = false;
+            return;
+        }
         
         if (state.controlMode === 'select-face') {
             const face = pickFace();
             handleFaceSelect(face);
+            return;
+        }
+
+        if (state.controlMode === 'points') {
+            const entry = pickEntry(true);
+            handleSelect(entry);
+            handleGridHover(null);
+            handleFaceHover(null);
             return;
         }
 
@@ -479,7 +699,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleGridHover(null);
             return;
         }
-        const entry = pickEntry();
+        const entry = pickEntry(true);
         if (entry) {
             handleSelect(entry);
             handleGridHover(null);
@@ -490,8 +710,32 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         handleGridHover(null);
     }
 
+    function onPointerDown(event) {
+        if (event.button !== 0) return;
+        if (state.controlMode !== 'points') return;
+        if (!event.shiftKey) return;
+        updateMouse(event);
+        const entry = pickEntry(true);
+        if (!entry) return;
+        handleSelect(entry);
+        beginPointDrag(entry, event);
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    function onPointerUp(event) {
+        if (!dragState) return;
+        const moved = Math.abs(event.clientY - dragState.startMouseY) > 2;
+        suppressClick = moved;
+        finalizePointDrag();
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('click', onClick);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
 
     return {
         clearSelection: () => {

@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { COLORS } from './constants.js';
 import { getVertexKey, roundCoord } from './geometry.js';
 
-export function createBlockManager({ scene, state }) {
+export function createBlockManager({ scene, state, entryManager }) {
     const blockEntries = [];
     const blockEntriesByKey = new Map();
     const meshToBlockEntry = new WeakMap();
+    const blockVertexRefs = new Map();
 
     const BASE_COLOR = COLORS.face;
     const ACTIVE_COLOR = COLORS.line;
@@ -25,6 +26,80 @@ export function createBlockManager({ scene, state }) {
         }
     }
 
+    function createPointMarker(position) {
+        const point = new THREE.Mesh(state.pointGeometry, state.pointMaterial.clone());
+        point.position.copy(position);
+        point.renderOrder = 2;
+        return point;
+    }
+
+    function getBlockCorners(entry) {
+        const size = entry.size ?? 1;
+        const half = size / 2;
+        const offsets = [-half, half];
+        const corners = [];
+        for (const ox of offsets) {
+            for (const oy of offsets) {
+                for (const oz of offsets) {
+                    corners.push(new THREE.Vector3(
+                        entry.position.x + ox,
+                        entry.position.y + oy,
+                        entry.position.z + oz
+                    ));
+                }
+            }
+        }
+        return corners;
+    }
+
+    function addBlockVertices(entry) {
+        if (!entryManager) return;
+        const corners = getBlockCorners(entry);
+        for (const corner of corners) {
+            const key = getVertexKey(corner);
+            const count = blockVertexRefs.get(key) ?? 0;
+            blockVertexRefs.set(key, count + 1);
+            if (count === 0) {
+                const pointMesh = createPointMarker(corner);
+                entryManager.registerPointEntry(pointMesh, corner, key, 'block');
+                if (!state.vertexPositions.has(key)) {
+                    state.vertexPositions.set(key, corner.clone());
+                }
+            }
+        }
+    }
+
+    function removeBlockVertices(entry) {
+        if (!entryManager) return;
+        const corners = getBlockCorners(entry);
+        for (const corner of corners) {
+            const key = getVertexKey(corner);
+            const count = blockVertexRefs.get(key) ?? 0;
+            if (count <= 1) {
+                blockVertexRefs.delete(key);
+                const entries = entryManager.getPointEntriesByKey(key);
+                for (const pointEntry of entries) {
+                    if (pointEntry.source !== 'block') continue;
+                    pointEntry.active = false;
+                    entryManager.refreshEntryVisibility(pointEntry);
+                }
+            } else {
+                blockVertexRefs.set(key, count - 1);
+            }
+        }
+    }
+
+    function syncBlockVertices(entry) {
+        if (!entryManager) return;
+        if (entry.active && !entry.vertexActive) {
+            addBlockVertices(entry);
+            entry.vertexActive = true;
+        } else if (!entry.active && entry.vertexActive) {
+            removeBlockVertices(entry);
+            entry.vertexActive = false;
+        }
+    }
+
     function updateAppearance(entry) {
         if (!entry.mesh.material) return;
         const material = entry.mesh.material;
@@ -37,6 +112,7 @@ export function createBlockManager({ scene, state }) {
     }
 
     function refreshEntryVisibility(entry) {
+        syncBlockVertices(entry);
         updateAppearance(entry);
         if (!entry.active) {
             removeEntryFromScene(entry);
@@ -73,7 +149,8 @@ export function createBlockManager({ scene, state }) {
             active: true,
             hovered: false,
             selected: false,
-            inScene: false
+            inScene: false,
+            vertexActive: false
         };
         blockEntries.push(entry);
         blockEntriesByKey.set(key, entry);

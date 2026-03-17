@@ -225,7 +225,7 @@ export function attachKeyboardControls({
         if (deleteKeys.has(event.key) || deleteKeys.has(event.code)) {
             event.preventDefault();
             if (!hasModifier) {
-                if (state.controlMode !== 'lines' && blockManager) {
+                if ((state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse') && blockManager) {
                     deleteSelectedBlock();
                 } else {
                     deleteSelectedPoint();
@@ -288,7 +288,7 @@ export function attachKeyboardControls({
             onUpdate();
             return;
         }
-        if (state.controlMode === 'blocks-mouse') {
+        if (state.controlMode === 'blocks-mouse' || state.controlMode === 'points') {
             return;
         }
 
