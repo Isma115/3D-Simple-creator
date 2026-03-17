@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { COLORS } from './constants.js';
-import { getVertexKey } from './geometry.js';
+import { getVertexKey, roundCoord } from './geometry.js';
 
 export function createBlockManager({ scene, state }) {
     const blockEntries = [];
@@ -45,8 +45,12 @@ export function createBlockManager({ scene, state }) {
         addEntryToScene(entry);
     }
 
-    function registerBlock(position) {
-        const key = getVertexKey(position);
+    function getBlockKey(position, size) {
+        return `${getVertexKey(position)}|${roundCoord(size)}`;
+    }
+
+    function registerBlock(position, size = 1) {
+        const key = getBlockKey(position, size);
         const existing = blockEntriesByKey.get(key);
         if (existing) {
             const wasInactive = !existing.active;
@@ -59,11 +63,13 @@ export function createBlockManager({ scene, state }) {
 
         const mesh = new THREE.Mesh(state.blockGeometry, state.blockMaterial.clone());
         mesh.position.copy(position);
+        mesh.scale.setScalar(size);
         mesh.renderOrder = 1;
         const entry = {
             mesh,
             position: position.clone(),
             key,
+            size,
             active: true,
             hovered: false,
             selected: false,
@@ -100,6 +106,47 @@ export function createBlockManager({ scene, state }) {
         return blockEntriesByKey.get(key) ?? null;
     }
 
+    function splitBlock(entry) {
+        if (!entry || !entry.active) return null;
+        const size = entry.size ?? 1;
+        const childSize = size / 2;
+        const offset = size / 4;
+        const offsets = [-offset, offset];
+        const childPositions = [];
+        for (const ox of offsets) {
+            for (const oy of offsets) {
+                for (const oz of offsets) {
+                    childPositions.push(new THREE.Vector3(
+                        entry.position.x + ox,
+                        entry.position.y + oy,
+                        entry.position.z + oz
+                    ));
+                }
+            }
+        }
+
+        for (const pos of childPositions) {
+            const key = getBlockKey(pos, childSize);
+            const existing = blockEntriesByKey.get(key);
+            if (existing && existing.active) {
+                return null;
+            }
+        }
+
+        const children = [];
+        for (const pos of childPositions) {
+            const result = registerBlock(pos, childSize);
+            children.push(result.entry);
+        }
+
+        entry.active = false;
+        entry.hovered = false;
+        entry.selected = false;
+        refreshEntryVisibility(entry);
+
+        return { parent: entry, children };
+    }
+
     return {
         registerBlock,
         refreshEntryVisibility,
@@ -107,6 +154,7 @@ export function createBlockManager({ scene, state }) {
         setSelected,
         getBlockEntries,
         getBlockByMesh,
-        getBlockByKey
+        getBlockByKey,
+        splitBlock
     };
 }

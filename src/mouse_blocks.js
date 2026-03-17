@@ -13,6 +13,10 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
         mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     }
 
+    function snapToSize(value, size) {
+        return Math.round(value / size) * size;
+    }
+
     function getBlockHit() {
         const entries = blockManager.getBlockEntries().filter((entry) => entry.active);
         if (entries.length === 0) return null;
@@ -22,9 +26,9 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
         return hits.length > 0 ? hits[0] : null;
     }
 
-    function placeBlock(position) {
+    function placeBlock(position, size = 1) {
         const cursorBefore = state.currentPosition.clone();
-        const { entry, created } = blockManager.registerBlock(position);
+        const { entry, created } = blockManager.registerBlock(position, size);
         state.currentPosition.copy(entry.position);
         state.cursorMesh.position.copy(state.currentPosition);
         state.pathPoints = [state.currentPosition.clone()];
@@ -68,13 +72,15 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
     function handleRightClick() {
         const hit = getBlockHit();
         if (hit && hit.face) {
+            const entry = blockManager.getBlockByMesh(hit.object);
             const faceNormal = hit.face.normal.clone().applyQuaternion(hit.object.quaternion);
-            const targetPosition = hit.object.position.clone().add(faceNormal);
+            const size = entry ? entry.size ?? 1 : 1;
+            const targetPosition = hit.object.position.clone().add(faceNormal.multiplyScalar(size));
             placeBlock(new THREE.Vector3(
-                Math.round(targetPosition.x),
-                Math.round(targetPosition.y),
-                Math.round(targetPosition.z)
-            ));
+                snapToSize(targetPosition.x, size),
+                snapToSize(targetPosition.y, size),
+                snapToSize(targetPosition.z, size)
+            ), size);
             return;
         }
         raycaster.setFromCamera(mouse, camera);

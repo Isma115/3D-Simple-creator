@@ -58,10 +58,32 @@
           <input type="radio" name="control-mode" value="blocks-mouse">
           <span>Bloques (raton)</span>
         </label>
+        <label class="radio-option">
+          <input type="radio" name="control-mode" value="select-face">
+          <span>Seleccionar cara</span>
+        </label>
       </div>
       <button id="cleanup-lines-button" class="action-button" type="button">
         Eliminar lineas sin cara
       </button>
+
+      <div id="texture-manager" class="texture-panel" style="display: none;">
+        <div class="control-title">Gestor de Texturas</div>
+        <div class="texture-upload-row">
+          <input type="file" id="texture-upload-input" accept="image/*" style="display: none;">
+          <button id="texture-upload-btn" class="action-button secondary" type="button">Cargar Textura</button>
+        </div>
+        <div id="texture-list" class="texture-list">
+          <!-- Texture items will be added here -->
+        </div>
+        <button id="apply-texture-btn" class="action-button primary" type="button" disabled>
+          Aplicar Textura
+        </button>
+        <label class="checkbox-option">
+          <input type="checkbox" id="joint-face-checkbox" checked>
+          <span>Seleccionar cara conjunta</span>
+        </label>
+      </div>
     </div>
   </div>
 

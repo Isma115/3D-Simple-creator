@@ -4,8 +4,9 @@
 Esta es la "cara" de la aplicación, lo primero que ves cuando abres la página. Consiste en:
 - **Un lienzo en blanco** (que en realidad es oscuro) que ocupa toda tu pantalla preparándolo todo para que dibujes.
  - **Un panel flotante semitransparente** en la esquina superior izquierda. Ahora muestra un cuadro pequeño con estadísticas del modelo (caras, vértices, puntos y líneas) y las coordenadas actuales.
- - **Un grupo de radio buttons** para elegir el tipo de control (lineas, bloques con teclado o bloques con raton).
+ - **Un grupo de radio buttons** para elegir el tipo de control (líneas, bloques con teclado, bloques con ratón o seleccionar cara).
  - **Un botón de limpieza** justo debajo, para eliminar líneas que no forman ninguna cara.
+ - **Un panel del Gestor de Texturas**, que aparece oculto y solo se muestra cuando seleccionas la opción de control "Seleccionar cara". Ese panel permite cargar, seleccionar, aplicar y borrar texturas.
 Este panel está diseñado con un estilo "cristalino", lo que significa que parece un cristal borroso, lo cual le da un toque moderno y tecnológico sin tapar demasiado el dibujo que hay debajo.
 
 ## Explicación Técnica

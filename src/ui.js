@@ -38,5 +38,12 @@ export function createUI() {
         }
     }
 
-    return { update, onCleanupLines, onControlModeChange, setControlMode };
+    function showTextureManager(show) {
+        const texturePanel = document.getElementById('texture-manager');
+        if (texturePanel) {
+            texturePanel.style.display = show ? 'flex' : 'none';
+        }
+    }
+
+    return { update, onCleanupLines, onControlModeChange, setControlMode, showTextureManager };
 }

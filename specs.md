@@ -26,7 +26,14 @@
 
 [COMPLETADA] Cón un botón activa o desactiva edición por bloques, en lugar de dibujar líneas y puntos con las teclas, que se dibujen cubos directamente y con las flechas crear cubos hacia las mismas direcciones. En este modo se podrán seleccionar con el click izquierdo cubos completos y poder pulsar delete o retroceso para borrar dicho cubo seleccionado.
 
-[TAREA] El botón de tipo de control seran radio buttons, y añade un nuevo control que permita colocar bloques utilizando el ratón (click izquierdo para eliminar bloque y click derecho para colocar bloque) esto es al estilo "Minecraft"
+[COMPLETADA] El botón de tipo de control seran radio buttons, y añade un nuevo control que permita colocar bloques utilizando el ratón (click izquierdo para eliminar bloque y click derecho para colocar bloque) esto es al estilo "Minecraft"
+
+[COMPLETADA] Teniendo seleccionada la opción de utilizar bloques con las flechas del teclado, al pulsar click derecho sobre uno de los cubos tiene que aparecer una opción de "dividir" lo que va a hacer esa opción es poder dividir el cubo en 8 cubos más pequeños y poder editar de forma independiente esos 8 cubos, y lo mismo si quiero dividir un cubo de esos 8 cubos, es decir, que se pueda dividir en 8 cubos más pequeños de forma recursiva.
+
+[COMPLETADA] Añade una opción en los radio button que sea seleccionar cara, y al hacer click sobre una cara aparezca una opción de "Aplicar textura", va a existir una lista de texturas (con previsualización) que se van a poder cargar (o eliminar) y al hacer click sobre aplicar textura teniendo seleccionada una cara del modelo 3D se aplicará la textura a esa cara. 
+
+
+[TAREA] Añadir una opción "puntos" el cual permita seleccionar uno de los puntos del modelo 3D y con el click izquierdo con la tecla mayusculas sostenida arrastrarlo hacia afuera o hacia adentro
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 

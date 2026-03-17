@@ -21,6 +21,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
     function getBlockEntries(action) {
         const entries = [];
         if (action.blockEntries) entries.push(...action.blockEntries);
+        if (action.childEntries) entries.push(...action.childEntries);
         return entries;
     }
 
@@ -158,6 +159,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         const isDelete = action.kind === 'delete';
         const isBlockDelete = action.kind === 'block-delete';
         const isBlockAdd = action.kind === 'block-add';
+        const isBlockSplit = action.kind === 'block-split';
         const lineEntries = getLineEntries(action);
         const pointEntries = getPointEntries(action);
         const blockEntries = getBlockEntries(action);
@@ -171,6 +173,10 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
             } else if (isBlockAdd) {
                 applyBlocks(blockEntries, false);
             }
+        }
+        if (isBlockSplit && blockManager) {
+            applyBlocks(action.childEntries ?? [], false);
+            applyBlocks(action.parentEntry ? [action.parentEntry] : [], true);
         }
 
         const addFaces = isDelete;
@@ -188,7 +194,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
             state.cursorMesh.position.copy(state.currentPosition);
             state.pathPoints = action.pathBefore.map((point) => point.clone());
         }
-        if ((isBlockAdd || isBlockDelete) && action.cursorBefore) {
+        if ((isBlockAdd || isBlockDelete || isBlockSplit) && action.cursorBefore) {
             state.currentPosition.copy(action.cursorBefore);
             state.cursorMesh.position.copy(state.currentPosition);
             state.pathPoints = [state.currentPosition.clone()];
@@ -205,6 +211,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         const isDelete = action.kind === 'delete';
         const isBlockDelete = action.kind === 'block-delete';
         const isBlockAdd = action.kind === 'block-add';
+        const isBlockSplit = action.kind === 'block-split';
         const lineEntries = getLineEntries(action);
         const pointEntries = getPointEntries(action);
         const blockEntries = getBlockEntries(action);
@@ -218,6 +225,10 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
             } else if (isBlockAdd) {
                 applyBlocks(blockEntries, true);
             }
+        }
+        if (isBlockSplit && blockManager) {
+            applyBlocks(action.parentEntry ? [action.parentEntry] : [], false);
+            applyBlocks(action.childEntries ?? [], true);
         }
 
         const addFaces = !isDelete;
@@ -235,7 +246,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
             state.cursorMesh.position.copy(state.currentPosition);
             state.pathPoints = action.pathAfter.map((point) => point.clone());
         }
-        if ((isBlockAdd || isBlockDelete) && action.cursorAfter) {
+        if ((isBlockAdd || isBlockDelete || isBlockSplit) && action.cursorAfter) {
             state.currentPosition.copy(action.cursorAfter);
             state.cursorMesh.position.copy(state.currentPosition);
             state.pathPoints = [state.currentPosition.clone()];

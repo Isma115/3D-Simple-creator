@@ -12,11 +12,15 @@ import { ensureVertex } from './src/geometry.js';
 import { computeStats, computeVisibleVertices } from './src/stats.js';
 import { attachSelection } from './src/selection.js';
 import { attachMouseBlockControls } from './src/mouse_blocks.js';
+import { attachBlockContextMenu } from './src/block_context.js';
 import { createCleanupManager } from './src/cleanup.js';
+import { createTextureManager } from './src/textures.js';
 
 const { scene, camera, renderer, controls } = initScene();
 const state = createState(scene);
 const ui = createUI();
+const textureManager = createTextureManager();
+
 
 const entryManager = createEntryManager(scene, state.planeFill);
 const blockManager = createBlockManager({ scene, state });
@@ -90,13 +94,27 @@ attachMouseBlockControls({
     onUpdate: updateUI
 });
 
+attachBlockContextMenu({
+    camera,
+    renderer,
+    state,
+    blockManager,
+    undoManager,
+    onUpdate: updateUI
+});
+
 ui.onControlModeChange((mode) => {
     state.controlMode = mode;
     selectionManager.clearSelection();
     state.pathPoints = [state.currentPosition.clone()];
+    ui.showTextureManager(mode === 'select-face');
     updateUI();
 });
 ui.setControlMode(state.controlMode);
+
+textureManager.onApply((texture) => {
+    selectionManager.applyTextureToSelected(texture);
+});
 
 function animate() {
     requestAnimationFrame(animate);

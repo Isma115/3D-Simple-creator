@@ -7,7 +7,7 @@ Este modulo escucha las teclas de flechas para dibujar o colocar cubos con tecla
 `src/input.js` expone `attachKeyboardControls(...)` que:
 - Interpreta flechas en funcion de la orientacion de la camara.
 - En modo normal crea nuevas lineas y puntos, registra acciones y actualiza la UI.
-- En modo bloques con teclado crea cubos alineados a la rejilla y actualiza la posicion del cursor sin tocar la logica de caras.
+- En modo bloques con teclado crea cubos alineados a la rejilla segun el tamano del cubo seleccionado y actualiza la posicion del cursor sin tocar la logica de caras.
 - En modo bloques con raton ignora las flechas para que el control sea exclusivamente con clicks.
 - Detecta bucles para generar caras mediante `faceController`.
 - Invoca `undoManager` cuando el usuario pulsa Ctrl/Command + Z o Y.

@@ -62,7 +62,7 @@ body {
   color: rgba(255, 255, 255, 0.65);
 }
 
-.radio-option {
+.radio-option, .checkbox-option {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -70,8 +70,34 @@ body {
   color: rgba(255, 255, 255, 0.9);
 }
 
-.radio-option input[type='radio'] {
+.radio-option input[type='radio'],
+.checkbox-option input[type='checkbox'] {
   accent-color: #ff8a00;
+}
+
+.context-menu {
+  position: absolute;
+  z-index: 30;
+  background: rgba(18, 18, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+.context-menu button {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.85rem;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .action-button {
@@ -204,4 +230,111 @@ kbd {
 /* Make canvas explicitly fill screen just in case */
 canvas {
   display: block;
+}
+
+/* Texture Manager */
+.texture-panel {
+  background: rgba(10, 10, 10, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.texture-upload-row {
+  display: flex;
+  justify-content: stretch;
+}
+
+.texture-upload-row button {
+  width: 100%;
+}
+
+.texture-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px; /* for scrollbar */
+}
+
+.texture-list::-webkit-scrollbar {
+  height: 4px;
+}
+
+.texture-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.texture-item {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.texture-item:hover {
+  transform: scale(1.05);
+}
+
+.texture-item.selected {
+  border-color: #ff8a00;
+}
+
+.texture-delete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  border: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.texture-item:hover .texture-delete {
+  opacity: 1;
+}
+
+button.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: none;
+}
+
+button.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+  filter: grayscale(1);
 }

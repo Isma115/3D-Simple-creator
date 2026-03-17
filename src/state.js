@@ -71,6 +71,8 @@ export function createState(scene) {
         hoveredEntry: null,
         controlMode: 'lines',
         selectedBlock: null,
-        hoveredBlock: null
+        hoveredBlock: null,
+        selectedFace: null,
+        hoveredFace: null
     };
 }

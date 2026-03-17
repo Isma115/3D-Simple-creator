@@ -262,11 +262,13 @@ export function attachKeyboardControls({
 
         if (state.controlMode === 'blocks-keyboard' && blockManager) {
             const startPoint = state.currentPosition.clone();
-            state.currentPosition.add(moveVector.multiplyScalar(STEP_SIZE));
+            const activeBlock = state.selectedBlock ?? state.hoveredBlock;
+            const stepSize = activeBlock ? activeBlock.size ?? STEP_SIZE : STEP_SIZE;
+            state.currentPosition.add(moveVector.multiplyScalar(stepSize));
             state.cursorMesh.position.copy(state.currentPosition);
             state.pathPoints = [state.currentPosition.clone()];
 
-            const { entry, created } = blockManager.registerBlock(state.currentPosition.clone());
+            const { entry, created } = blockManager.registerBlock(state.currentPosition.clone(), stepSize);
             if (state.selectedBlock && state.selectedBlock !== entry) {
                 blockManager.setSelected(state.selectedBlock, false);
             }
