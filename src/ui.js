@@ -8,6 +8,8 @@ export function createUI() {
     const clearPointSelectionButton = document.getElementById('clear-point-selection-button');
     const toggleWorkModeButton = document.getElementById('toggle-work-mode-btn');
     const controlModeInputs = Array.from(document.querySelectorAll('input[name="control-mode"]'));
+    const controlModeToast = document.getElementById('control-mode-toast');
+    const controlModeToastValue = document.getElementById('control-mode-toast-value');
     const geometryInputs = Array.from(document.querySelectorAll('input[name="geometry-type"]'));
     const toggleInventoryBtn = document.getElementById('toggle-inventory-btn');
     const geometryInventory = document.getElementById('geometry-inventory');
@@ -22,6 +24,11 @@ export function createUI() {
     const textureModal = document.getElementById('texture-modal');
     const closeTextureModalButton = document.getElementById('close-texture-modal-btn');
     let controlModeChangeHandler = null;
+    let controlModeToastHideTimer = null;
+    const controlModeLabels = new Map(controlModeInputs.map((input) => {
+        const label = input.closest('label')?.querySelector('span')?.textContent?.trim() ?? input.value;
+        return [input.value, label];
+    }));
 
     if (toggleInventoryBtn && geometryInventory) {
         toggleInventoryBtn.addEventListener('click', () => {
@@ -61,6 +68,30 @@ export function createUI() {
         }
     }
 
+    function getControlModeLabel(value) {
+        return controlModeLabels.get(value) ?? value;
+    }
+
+    function hideControlModeToast() {
+        if (!controlModeToast) return;
+        controlModeToast.classList.remove('visible');
+        controlModeToast.setAttribute('aria-hidden', 'true');
+    }
+
+    function showControlModeToast(value) {
+        if (!controlModeToast || !controlModeToastValue) return;
+        controlModeToastValue.textContent = getControlModeLabel(value);
+        controlModeToast.classList.add('visible');
+        controlModeToast.setAttribute('aria-hidden', 'false');
+        if (controlModeToastHideTimer) {
+            clearTimeout(controlModeToastHideTimer);
+        }
+        controlModeToastHideTimer = window.setTimeout(() => {
+            hideControlModeToast();
+            controlModeToastHideTimer = null;
+        }, 1500);
+    }
+
     function getActiveControlModeIndex() {
         const activeIndex = controlModeInputs.findIndex((input) => input.checked);
         return activeIndex >= 0 ? activeIndex : 0;
@@ -74,6 +105,7 @@ export function createUI() {
         if (!nextInput) return;
         nextInput.checked = true;
         controlModeChangeHandler(nextInput.value);
+        showControlModeToast(nextInput.value);
     }
 
     function getWheelStep(event) {
@@ -234,7 +266,7 @@ export function createUI() {
     }
 
     window.addEventListener('wheel', (event) => {
-        if (!event.ctrlKey) return;
+        if (!event.metaKey) return;
         if (isTextureManagerVisible()) return;
         if (controlModeInputs.length === 0 || !controlModeChangeHandler) return;
 
@@ -242,8 +274,9 @@ export function createUI() {
         if (step === 0) return;
 
         event.preventDefault();
+        event.stopPropagation();
         cycleControlMode(step);
-    }, { passive: false });
+    }, { passive: false, capture: true });
 
     return {
         update,

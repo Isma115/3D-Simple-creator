@@ -1,6 +1,279 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+
+function cloneMeshWithoutLines(mesh) {
+    const cloned = mesh.clone();
+    const removableChildren = cloned.children.filter((child) => child.isLine || child.isLineSegments);
+    for (const child of removableChildren) {
+        cloned.remove(child);
+    }
+    return cloned;
+}
+
+function getCubeCell(entry) {
+    const size = entry.size ?? 1;
+    return {
+        x: Math.round(entry.position.x / size),
+        y: Math.round(entry.position.y / size),
+        z: Math.round(entry.position.z / size)
+    };
+}
+
+function getCellKey(x, y, z) {
+    return `${x},${y},${z}`;
+}
+
+function canMergeCubeEntry(entry) {
+    return entry.geometryType === 'cube' && !Array.isArray(entry.mesh?.material) && !entry.mesh?.material?.map;
+}
+
+function mergePlaneCells(cells) {
+    const ordered = Array.from(cells).sort((a, b) => a.v - b.v || a.u - b.u);
+    const used = new Set();
+    const rects = [];
+
+    for (const cell of ordered) {
+        const startKey = getCellKey(cell.u, cell.v, 0);
+        if (used.has(startKey)) continue;
+
+        let width = 1;
+        while (cells.some((candidate) => candidate.u === cell.u + width && candidate.v === cell.v) && !used.has(getCellKey(cell.u + width, cell.v, 0))) {
+            width += 1;
+        }
+
+        let height = 1;
+        heightLoop: while (true) {
+            const nextV = cell.v + height;
+            for (let du = 0; du < width; du += 1) {
+                const nextKey = getCellKey(cell.u + du, nextV, 0);
+                if (!cells.some((candidate) => candidate.u === cell.u + du && candidate.v === nextV) || used.has(nextKey)) {
+                    break heightLoop;
+                }
+            }
+            height += 1;
+        }
+
+        for (let dv = 0; dv < height; dv += 1) {
+            for (let du = 0; du < width; du += 1) {
+                used.add(getCellKey(cell.u + du, cell.v + dv, 0));
+            }
+        }
+
+        rects.push({
+            u: cell.u,
+            v: cell.v,
+            width,
+            height
+        });
+    }
+
+    return rects;
+}
+
+function pushQuad(positions, normals, uvs, vertices, normal) {
+    const triangleOrder = [0, 1, 2, 0, 2, 3];
+    const quadUvs = [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1]
+    ];
+
+    for (const index of triangleOrder) {
+        const vertex = vertices[index];
+        positions.push(vertex.x, vertex.y, vertex.z);
+        normals.push(normal.x, normal.y, normal.z);
+        const uv = quadUvs[index];
+        uvs.push(uv[0], uv[1]);
+    }
+}
+
+function createMergedCubeMesh(entries, material) {
+    const size = entries[0]?.size ?? 1;
+    const occupied = new Set();
+    const planeFaces = new Map();
+
+    for (const entry of entries) {
+        const cell = getCubeCell(entry);
+        occupied.add(getCellKey(cell.x, cell.y, cell.z));
+    }
+
+    function hasCell(x, y, z) {
+        return occupied.has(getCellKey(x, y, z));
+    }
+
+    function addFace(axis, direction, plane, u, v) {
+        const key = `${axis}:${direction}:${plane}`;
+        if (!planeFaces.has(key)) {
+            planeFaces.set(key, []);
+        }
+        planeFaces.get(key).push({ u, v });
+    }
+
+    for (const entry of entries) {
+        const cell = getCubeCell(entry);
+        if (!hasCell(cell.x - 1, cell.y, cell.z)) addFace('x', -1, cell.x - 0.5, cell.y, cell.z);
+        if (!hasCell(cell.x + 1, cell.y, cell.z)) addFace('x', 1, cell.x + 0.5, cell.y, cell.z);
+        if (!hasCell(cell.x, cell.y - 1, cell.z)) addFace('y', -1, cell.y - 0.5, cell.x, cell.z);
+        if (!hasCell(cell.x, cell.y + 1, cell.z)) addFace('y', 1, cell.y + 0.5, cell.x, cell.z);
+        if (!hasCell(cell.x, cell.y, cell.z - 1)) addFace('z', -1, cell.z - 0.5, cell.x, cell.y);
+        if (!hasCell(cell.x, cell.y, cell.z + 1)) addFace('z', 1, cell.z + 0.5, cell.x, cell.y);
+    }
+
+    const positions = [];
+    const normals = [];
+    const uvs = [];
+
+    for (const [planeKey, cells] of planeFaces.entries()) {
+        const [axis, directionText, planeText] = planeKey.split(':');
+        const direction = Number(directionText);
+        const plane = Number(planeText);
+        const rects = mergePlaneCells(cells);
+
+        for (const rect of rects) {
+            const u0 = (rect.u - 0.5) * size;
+            const u1 = (rect.u + rect.width - 0.5) * size;
+            const v0 = (rect.v - 0.5) * size;
+            const v1 = (rect.v + rect.height - 0.5) * size;
+            const p = plane * size;
+
+            if (axis === 'x' && direction > 0) {
+                pushQuad(
+                    positions,
+                    normals,
+                    uvs,
+                    [
+                        new THREE.Vector3(p, u0, v0),
+                        new THREE.Vector3(p, u1, v0),
+                        new THREE.Vector3(p, u1, v1),
+                        new THREE.Vector3(p, u0, v1)
+                    ],
+                    new THREE.Vector3(1, 0, 0)
+                );
+                continue;
+            }
+
+            if (axis === 'x') {
+                pushQuad(
+                    positions,
+                    normals,
+                    uvs,
+                    [
+                        new THREE.Vector3(p, u0, v0),
+                        new THREE.Vector3(p, u0, v1),
+                        new THREE.Vector3(p, u1, v1),
+                        new THREE.Vector3(p, u1, v0)
+                    ],
+                    new THREE.Vector3(-1, 0, 0)
+                );
+                continue;
+            }
+
+            if (axis === 'y' && direction > 0) {
+                pushQuad(
+                    positions,
+                    normals,
+                    uvs,
+                    [
+                        new THREE.Vector3(u0, p, v0),
+                        new THREE.Vector3(u0, p, v1),
+                        new THREE.Vector3(u1, p, v1),
+                        new THREE.Vector3(u1, p, v0)
+                    ],
+                    new THREE.Vector3(0, 1, 0)
+                );
+                continue;
+            }
+
+            if (axis === 'y') {
+                pushQuad(
+                    positions,
+                    normals,
+                    uvs,
+                    [
+                        new THREE.Vector3(u0, p, v0),
+                        new THREE.Vector3(u1, p, v0),
+                        new THREE.Vector3(u1, p, v1),
+                        new THREE.Vector3(u0, p, v1)
+                    ],
+                    new THREE.Vector3(0, -1, 0)
+                );
+                continue;
+            }
+
+            if (axis === 'z' && direction > 0) {
+                pushQuad(
+                    positions,
+                    normals,
+                    uvs,
+                    [
+                        new THREE.Vector3(u0, v0, p),
+                        new THREE.Vector3(u1, v0, p),
+                        new THREE.Vector3(u1, v1, p),
+                        new THREE.Vector3(u0, v1, p)
+                    ],
+                    new THREE.Vector3(0, 0, 1)
+                );
+                continue;
+            }
+
+            pushQuad(
+                positions,
+                normals,
+                uvs,
+                [
+                    new THREE.Vector3(u0, v0, p),
+                    new THREE.Vector3(u0, v1, p),
+                    new THREE.Vector3(u1, v1, p),
+                    new THREE.Vector3(u1, v0, p)
+                ],
+                new THREE.Vector3(0, 0, -1)
+            );
+        }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    const optimizedGeometry = mergeVertices(geometry, 1e-6);
+    optimizedGeometry.computeBoundingBox();
+    optimizedGeometry.computeBoundingSphere();
+
+    return new THREE.Mesh(optimizedGeometry, material.clone());
+}
+
+function collectExportBlockMeshes(blockManager, state) {
+    if (!blockManager) return [];
+
+    const exportMeshes = [];
+    const mergeGroups = new Map();
+    const activeBlocks = blockManager.getBlockEntries().filter((entry) => entry.active);
+
+    for (const entry of activeBlocks) {
+        if (!canMergeCubeEntry(entry)) {
+            exportMeshes.push(cloneMeshWithoutLines(entry.mesh));
+            continue;
+        }
+
+        const groupKey = `${entry.size}|cube`;
+        if (!mergeGroups.has(groupKey)) {
+            mergeGroups.set(groupKey, {
+                entries: [],
+                material: state.blockMaterial
+            });
+        }
+        mergeGroups.get(groupKey).entries.push(entry);
+    }
+
+    for (const group of mergeGroups.values()) {
+        exportMeshes.push(createMergedCubeMesh(group.entries, group.material));
+    }
+
+    return exportMeshes;
+}
 
 function saveString(text, filename) {
     save(new Blob([text], { type: 'text/plain' }), filename);
@@ -26,19 +299,12 @@ function createExportGroup(state, blockManager) {
 
     // Export user-created loose faces
     for (const [faceKey, mesh] of state.looseFaceMeshes.entries()) {
-        const clonedFace = mesh.clone();
-        // Remove grid lines and purely internal features if any
-        clonedFace.children = clonedFace.children.filter(child => child.type !== 'Line');
+        const clonedFace = cloneMeshWithoutLines(mesh);
         exportGroup.add(clonedFace);
     }
 
-    // Export active blocks
-    if (blockManager) {
-        const activeBlocks = blockManager.getBlockEntries().filter(entry => entry.active);
-        for (const block of activeBlocks) {
-            const clonedBlock = block.mesh.clone();
-            exportGroup.add(clonedBlock);
-        }
+    for (const blockMesh of collectExportBlockMeshes(blockManager, state)) {
+        exportGroup.add(blockMesh);
     }
 
     return exportGroup;

@@ -73,7 +73,7 @@ const updateUI = () => {
     entryManager.applyLooseFaceVisibility(state.looseFaceVertices);
     entryManager.applyVisibleVertices(visibleVertices, showAllPoints);
     ui.setClearPointSelectionEnabled((state.controlMode === 'lines' || state.workMode === 'blueprint') && state.selectedPointKeys.length > 0);
-    ui.update({ position: state.currentPosition, stats: computeStats(state, entryManager, visibleVertices) });
+    ui.update({ position: state.currentPosition, stats: computeStats(state, entryManager, visibleVertices, blockManager) });
     refreshTextureTools();
 };
 

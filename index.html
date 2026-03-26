@@ -17,29 +17,14 @@
   <!-- UI Overlay -->
   <div id="ui-stack">
     <div id="ui-overlay" class="glass-panel">
-      <h1>Simple 3D Creator</h1>
-      <p class="subtitle">Dibuja en 3D usando las flechas del teclado.</p>
-
       <div id="stats-panel" class="stats-panel">
-        <div class="stat-row">
-          <span class="stat-label">Caras</span>
-          <span id="stat-faces" class="stat-value">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Vertices</span>
-          <span id="stat-vertices" class="stat-value">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Puntos</span>
-          <span id="stat-points" class="stat-value">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Lineas</span>
-          <span id="stat-lines" class="stat-value">0</span>
-        </div>
+        <span class="stat-row"><span class="stat-label">Caras</span><span id="stat-faces" class="stat-value">0</span></span>
+        <span class="stat-row"><span class="stat-label">Vertices</span><span id="stat-vertices" class="stat-value">0</span></span>
+        <span class="stat-row"><span class="stat-label">Puntos</span><span id="stat-points" class="stat-value">0</span></span>
+        <span class="stat-row"><span class="stat-label">Lineas</span><span id="stat-lines" class="stat-value">0</span></span>
       </div>
       <div class="status">
-        Coordenadas: <span id="coordinates-display">X: 0, Y: 0, Z: 0</span>
+        <span id="coordinates-display">X: 0.0, Y: 0.0, Z: 0.0</span>
       </div>
     </div>
 
@@ -144,6 +129,12 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="control-mode-toast" class="control-mode-toast" aria-live="polite" aria-hidden="true">
+    <span class="control-mode-toast-label">Tipo de control</span>
+    <strong id="control-mode-toast-value">Lineas</strong>
+    <span class="control-mode-toast-hint">Meta + rueda del raton</span>
   </div>
 
   <div id="blueprint-workspace" class="blueprint-workspace" style="display: none;">

@@ -47,7 +47,7 @@ export function createState(scene) {
 
     // Geometry dictionary for inventory
     const geometries = {
-        cube: makeSculptableGeometry(new THREE.BoxGeometry(1, 1, 1, 16, 16, 16)),
+        cube: makeSculptableGeometry(new THREE.BoxGeometry(1, 1, 1)),
         sphere: makeSculptableGeometry(new THREE.SphereGeometry(0.5, 32, 24)),
         cylinder: makeSculptableGeometry(new THREE.CylinderGeometry(0.5, 0.5, 1, 32, 16)),
         pyramid: makeSculptableGeometry(new THREE.ConeGeometry(0.707, 1, 4, 12)), // 0.707 radius fits closely in 1x1x1

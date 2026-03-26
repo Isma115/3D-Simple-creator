@@ -17,7 +17,7 @@ Este archivo es el "director de orquesta". No dibuja nada por si mismo, sino que
 - Conecta el boton de limpieza con `createCleanupManager` para eliminar lineas sin cara.
 - Inicia el bucle de animacion con `requestAnimationFrame`.
 - En cada actualizacion recalcula los vertices visibles, oculta el cursor naranja en los modos de bloques para no tapar la pieza seleccionada y, cuando el modo de 4 vistas esta activo, fuerza que todos los puntos se mantengan visibles para que el usuario pueda construir el volumen desde las proyecciones.
-- Conecta los radio buttons del tipo de control para alternar entre dibujo normal, modo puntos, bloques con teclado o bloques con raton y limpiar selecciones.
+- Conecta los radio buttons del tipo de control para alternar entre dibujo normal, modo puntos, bloques con teclado o bloques con raton, limpiar selecciones y mantener sincronizado el indicador flotante que aparece cuando el usuario cambia de modo con `Meta + rueda`.
 - Conecta un boton de cambio global de modo de trabajo para entrar o salir del flujo de modelado por 4 vistas.
 - En el bucle de animacion decide si renderiza una sola vista perspectiva o si delega el render en el controlador multivista.
 - Mantiene sincronizados el gestor de texturas, el alcance UV elegido por el usuario y el editor UV mediante una funcion auxiliar que refresca las herramientas de texturizado segun el contexto.

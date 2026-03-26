@@ -65,7 +65,13 @@
 
 [COMPLETADA] Al momento de pulsar la tecla shift + rueda del ratón, permite que se pueda cambiar el radiobutton seleccionado, es decir, que se pueda cambiar entre los diferentes modos de control sin necesidad de pulsar el radiobutton correspondiente.
 
-[TAREA] La funcionalidad de desplazar que simplemente se active al hacer click sobre uno de los cubos o figuras movibles del modelo
+[COMPLETADA] La funcionalidad de desplazar que simplemente se active al hacer click sobre uno de los cubos o figuras movibles del modelo
+
+[COMPLETADA] "Tipo de control" tiene que aparecer en frente de la pantalla como ventanita flotante al momento de hacer Ctrl+rueda del ratón hacia arriba o abajo (por cierto, ahora mismo no funciona correctamente no cambia el tipo de control) y que permita cambiar entre los diferentes modos de control sin necesidad de pulsar el radiobutton correspondiente, esta ventanita tiene que mostrarse al momento de detectar un cambio y debe ocultarse un segundo y medio después
+
+[COMPLETADA] Quiero que los controles de mover figura o cubo se activen no con un solo click sino con doble click
+
+
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 

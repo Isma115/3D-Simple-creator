@@ -2,12 +2,19 @@
 
 ## Explicación Sencilla
 Este módulo permite guardar el modelo 3D que has creado. Coge todos los cubos y caras dibujadas, eliminando de paso los elementos visuales que te ayudan a dibujar (como las líneas guía, las redículas o el puntero de edición) y lo empaqueta en un archivo que puedes descargar a tu ordenador. 
+Cuando hay cubos normales pegados entre si, intenta juntarlos en bloques más grandes antes de exportar para no sacar una malla inflada con piezas duplicadas por dentro.
 Soporta dos formatos:
 - formato **.glb / .gltf**: Es el formato más moderno e ideal porque guarda la forma del modelo y *también las texturas* que le hayas aplicado a las distintas caras en un solo archivo interno.
 - formato **.zip (para .obj)**: Es un formato más antiguo y extendido. Dado que el formato `.obj` base no soporta incrustar texturas en el mismo fichero, al exportar en este modo la aplicación dibuja las texturas, ensambla un `.mtl` (archivo de materiales de OBJ), lo junta todo con el propio `.obj` en un fichero `.zip` y lo descarga a tu ordenador. ¡Así tienes la malla limpia y sus texturas emparejadas!
 
 ## Explicación Técnica
 El módulo `export.js` se encarga de aislar la geometría creada por el usuario (ignorando los helpers y líneas internas) clonando las mallas desde las caras libres (`state.looseFaceMeshes`) y los bloques activos (`blockManager.getBlockEntries()`) para añadirlos a un `THREE.Group` temporal.
+
+Antes de exportar los bloques:
+- elimina los hijos `Line` / `LineSegments` para que la malla blanca de contorno no termine dentro del archivo exportado.
+- detecta cubos simples adyacentes con el mismo tamaño y material base y reconstruye su piel exterior exacta, fusionando caras coplanares visibles y eliminando las internas sin cambiar la forma real del modelo.
+- indexa la geometria resultante para reutilizar vertices equivalentes en vez de duplicarlos por cada triangulo.
+- deja sin fusionar las figuras no cúbicas o los cubos con materiales complejos por cara para no romper texturas ni UV.
 
 Se vale de exportadores provistos por Three.js mediante sus módulos *addons* oficiales y JSZip:
 - `GLTFExporter` (`three/addons/exporters/GLTFExporter.js`): Convierte la agrupación a un formato binario `.glb`, lo cual preserva de manera eficiente las primitivas, colores (materiales) y **texturas de imagen**, resultando en un único archivo autocontenido.

@@ -7,8 +7,10 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     const CLICK_THRESHOLD_PX = 6;
+    const DOUBLE_CLICK_DELAY_MS = 350;
     let currentEntry = null;
     let pointerState = null;
+    let lastClickInfo = null;
 
     const menu = document.createElement('div');
     menu.className = 'context-menu';
@@ -177,18 +179,39 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         if (state.workMode !== 'classic') return;
         if (state.controlMode !== 'blocks-keyboard') return;
         if (event.button !== 0) return;
-        if (currentPointer.moved) return;
-        if (transformControl.dragging || transformControl.axis !== null) return;
+        if (currentPointer.moved) {
+            lastClickInfo = null;
+            return;
+        }
+        if (transformControl.dragging || transformControl.axis !== null) {
+            lastClickInfo = null;
+            return;
+        }
 
         updateMouse(event);
         const entry = pickBlockEntry();
-        if (!entry) return;
+        if (!entry) {
+            lastClickInfo = null;
+            return;
+        }
 
-        startDisplacement(entry);
+        const now = performance.now();
+        if (
+            lastClickInfo
+            && lastClickInfo.entry === entry
+            && (now - lastClickInfo.time) <= DOUBLE_CLICK_DELAY_MS
+        ) {
+            lastClickInfo = null;
+            startDisplacement(entry);
+            return;
+        }
+
+        lastClickInfo = { entry, time: now };
     }
 
     function cancelPointerInteraction() {
         pointerState = null;
+        lastClickInfo = null;
     }
 
     action.addEventListener('click', () => {
