@@ -152,20 +152,6 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         }
     }
 
-    function applySculptures(sculptures, useAfter) {
-        if (!sculptures) return;
-        for (const sculpture of sculptures) {
-            const snapshot = useAfter ? sculpture.after : sculpture.before;
-            if (!snapshot || !sculpture.entry?.mesh?.geometry?.attributes?.position) continue;
-            const geometry = sculpture.entry.mesh.geometry;
-            geometry.attributes.position.array.set(snapshot);
-            geometry.attributes.position.needsUpdate = true;
-            geometry.computeVertexNormals();
-            geometry.computeBoundingSphere();
-            geometry.computeBoundingBox();
-        }
-    }
-
     function performUndo() {
         const action = state.undoStack.pop();
         if (!action) return;
@@ -195,10 +181,6 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         if (action.kind === 'block-move' && blockManager) {
             blockManager.updateBlockPosition(action.entry, action.positionBefore);
         }
-        if (action.kind === 'block-sculpt') {
-            applySculptures(action.sculptures, false);
-        }
-
         const addFaces = isDelete;
         applyFaces(action.faces, addFaces);
         applyFaceRegistry(action.faceKeys, addFaces);
@@ -256,10 +238,6 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         if (action.kind === 'block-move' && blockManager) {
             blockManager.updateBlockPosition(action.entry, action.positionAfter);
         }
-        if (action.kind === 'block-sculpt') {
-            applySculptures(action.sculptures, true);
-        }
-
         const addFaces = !isDelete;
         applyFaces(action.faces, addFaces);
         applyFaceRegistry(action.faceKeys, addFaces);

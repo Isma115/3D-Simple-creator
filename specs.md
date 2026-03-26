@@ -71,7 +71,11 @@
 
 [COMPLETADA] Quiero que los controles de mover figura o cubo se activen no con un solo click sino con doble click
 
+[COMPLETADA] Quita la opción de esculpir y todo lo que tenga que ver con esculpir, ya que quiero que el programa no necesite esta funcionalidad, pues todo va a ser low poly
 
+[COMPLETADA] Corrige el editar UV ya que el texturizado lo hace al revés, en lugar de arrastrar la textura sobre el modelo 3D lo que hace es arrastrarse el propio modelo 3D, tiene que ser al revés
+
+[COMPLETADA] Permite que teniendo seleccionada una cara del modelo 3D se pueda aplicar una textura a dicha cara, teniendo un botón de rápido acceso "Aplicar textura" teniendo la textura cargada en un contenedor que va a contener toda la lista de texturas, de forma horizontal, y un panel que va a permitir desplegar dicha lista de texturas u ocultarlas
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 

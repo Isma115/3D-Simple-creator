@@ -37,7 +37,7 @@ export function createState(scene) {
     const pointGeometry = new THREE.SphereGeometry(0.05, 12, 12);
     const cursorGeometry = new THREE.SphereGeometry(0.02, 12, 12);
 
-    function makeSculptableGeometry(geometry) {
+    function prepareGeometry(geometry) {
         const prepared = mergeVertices(geometry.clone());
         prepared.computeVertexNormals();
         prepared.computeBoundingSphere();
@@ -47,11 +47,11 @@ export function createState(scene) {
 
     // Geometry dictionary for inventory
     const geometries = {
-        cube: makeSculptableGeometry(new THREE.BoxGeometry(1, 1, 1)),
-        sphere: makeSculptableGeometry(new THREE.SphereGeometry(0.5, 32, 24)),
-        cylinder: makeSculptableGeometry(new THREE.CylinderGeometry(0.5, 0.5, 1, 32, 16)),
-        pyramid: makeSculptableGeometry(new THREE.ConeGeometry(0.707, 1, 4, 12)), // 0.707 radius fits closely in 1x1x1
-        cone: makeSculptableGeometry(new THREE.ConeGeometry(0.5, 1, 32, 16))
+        cube: prepareGeometry(new THREE.BoxGeometry(1, 1, 1)),
+        sphere: prepareGeometry(new THREE.SphereGeometry(0.5, 32, 24)),
+        cylinder: prepareGeometry(new THREE.CylinderGeometry(0.5, 0.5, 1, 32, 16)),
+        pyramid: prepareGeometry(new THREE.ConeGeometry(0.707, 1, 4, 12)), // 0.707 radius fits closely in 1x1x1
+        cone: prepareGeometry(new THREE.ConeGeometry(0.5, 1, 32, 16))
     };
 
     // Default to cube for retrocompatibility
@@ -102,8 +102,6 @@ export function createState(scene) {
         hoveredFace: null,
         selectedFace: null,
         currentBlockSize: 1,
-        currentGeometryType: 'cube',
-        sculptMode: 'raise',
-        sculptRadius: 1.5
+        currentGeometryType: 'cube'
     };
 }

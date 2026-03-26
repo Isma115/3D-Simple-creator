@@ -21,6 +21,7 @@ Este archivo es el "director de orquesta". No dibuja nada por si mismo, sino que
 - Conecta un boton de cambio global de modo de trabajo para entrar o salir del flujo de modelado por 4 vistas.
 - En el bucle de animacion decide si renderiza una sola vista perspectiva o si delega el render en el controlador multivista.
 - Mantiene sincronizados el gestor de texturas, el alcance UV elegido por el usuario y el editor UV mediante una funcion auxiliar que refresca las herramientas de texturizado segun el contexto.
+- Activa o desactiva el nuevo acceso rapido de texturas segun si hay una cara seleccionada y conecta su boton directo de "Aplicar textura" con la aplicacion sobre esa seleccion concreta.
 - El boton global "Editar UV" abre una ventana modal de texturas y, si ya existe un objetivo valido, abre tambien la sesion UV correspondiente sobre una parte seleccionada o sobre toda la malla.
 - Arranca el envio de heartbeats para el cierre automatico del servidor.
 

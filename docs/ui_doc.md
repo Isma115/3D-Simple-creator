@@ -12,8 +12,10 @@ Esta es la "cara" de la aplicación, lo primero que ves cuando abres la página.
 - **Un botón de limpieza** justo debajo, para eliminar líneas que no forman ninguna cara.
 - **Una ventana modal del Gestor de Texturas**, que aparece sobre la aplicación cuando pulsas el botón global de "Editar UV". Esa ventana permite cargar, seleccionar, aplicar y borrar texturas.
 - **Un botón siempre activo de "Editar UV"**, que abre esa ventana modal aunque no estés en modo seleccionar cara.
+- **Un panel rapido de texturas**, visible en el panel de acciones, con un boton para desplegar u ocultar una lista horizontal de texturas ya cargadas y un boton directo de "Aplicar textura" para la cara seleccionada.
 - **Un espacio de trabajo UV parecido a Blender**, dentro de la ventana modal. El editor cuadrado ocupa la parte principal y la columna lateral queda para elegir el alcance, cargar texturas y aplicarlas.
-- **Un editor UV cuadrado**, dentro del mismo espacio de trabajo. Muestra la imagen cargada como fondo y encima la malla UV de la parte seleccionada o del modelo completo para poder arrastrarla o estirarla visualmente.
+- **Un editor UV cuadrado**, dentro del mismo espacio de trabajo. Muestra la malla UV fija y deja mover o escalar la textura por debajo para recolocarla visualmente.
+- **Un selector del tipo de cara conjunta**, dentro del gestor de texturas, que permite cambiar entre el tipo 1 y el tipo 2 de seleccion de caras, dejando el tipo 2 activo por defecto.
 - **Un marco visual para el modo 4 vistas**, con cuatro paneles etiquetados (arriba, derecha, izquierda y abajo) y una tarjeta grande de previsualizacion 3D a la derecha.
 Este panel está diseñado con un estilo "cristalino", lo que significa que parece un cristal borroso, lo cual le da un toque moderno y tecnológico sin tapar demasiado el dibujo que hay debajo.
 

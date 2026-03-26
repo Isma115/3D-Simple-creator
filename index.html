@@ -55,10 +55,6 @@
           <input type="radio" name="control-mode" value="select-face">
           <span>Seleccionar cara</span>
         </label>
-        <label class="radio-option">
-          <input type="radio" name="control-mode" value="sculpt">
-          <span>Esculpir</span>
-        </label>
       </div>
 
       <div class="inventory-panel" id="geometry-inventory-wrapper">
@@ -104,21 +100,27 @@
         Editar UV
       </button>
 
-      <div id="sculpt-panel" class="sculpt-panel" style="display: none;">
-        <div class="control-title">Esculpido</div>
-        <label class="radio-option">
-          <input type="radio" name="sculpt-mode" value="raise" checked>
-          <span>Sacar relieve</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="sculpt-mode" value="sink">
-          <span>Hundir</span>
-        </label>
-        <label class="range-option" for="sculpt-radius-input">
-          <span>Radio del pincel <strong id="sculpt-radius-value">1.5</strong></span>
-          <input id="sculpt-radius-input" type="range" min="0.5" max="4" step="0.5" value="1.5">
-        </label>
-        <p class="panel-hint">Arrastra con clic izquierdo sobre la superficie para esculpir.</p>
+      <div id="quick-texture-panel" class="quick-texture-panel" data-expanded="false">
+        <div class="quick-texture-header">
+          <div>
+            <div class="control-title">Texturas rapidas</div>
+            <p id="quick-texture-status" class="panel-hint">Selecciona una cara para usar el acceso rapido.</p>
+          </div>
+          <button id="toggle-quick-textures-btn" class="action-button secondary small" type="button">
+            Mostrar lista
+          </button>
+        </div>
+        <div id="quick-texture-content" class="quick-texture-content" style="display: none;">
+          <div id="quick-texture-list" class="texture-list quick-texture-list">
+            <!-- Quick texture items will be added here -->
+          </div>
+        </div>
+        <button id="quick-upload-texture-btn" class="action-button secondary" type="button">
+          Cargar textura
+        </button>
+        <button id="quick-apply-texture-btn" class="action-button primary" type="button" disabled>
+          Aplicar textura
+        </button>
       </div>
 
       <div class="export-panel" style="margin-top: 20px;">
@@ -242,6 +244,18 @@
             <input type="checkbox" id="joint-face-checkbox" checked>
             <span>Seleccionar cara conjunta</span>
           </label>
+          <div class="texture-scope-panel">
+            <span class="control-title">Tipo de seleccion conjunta</span>
+            <label class="radio-option">
+              <input type="radio" name="joint-face-selection-type" value="type-1">
+              <span>Tipo 1</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="joint-face-selection-type" value="type-2" checked>
+              <span>Tipo 2</span>
+            </label>
+            <p class="panel-hint">Tipo 1 usa la seleccion conectada anterior. Tipo 2 limita la seleccion a una superficie rectangular continua.</p>
+          </div>
           <p class="panel-hint">Consejo: si quieres imitar Blender, carga una textura, selecciona una cara o todo el modelo y después recoloca la isla UV en el cuadrado.</p>
         </div>
       </div>

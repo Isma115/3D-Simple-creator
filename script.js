@@ -16,7 +16,6 @@ import { attachBlockContextMenu } from './src/block_context.js';
 import { createCleanupManager } from './src/cleanup.js';
 import { createTextureManager } from './src/textures.js';
 import { exportGLTF, exportOBJ } from './src/export.js';
-import { attachSculptControls } from './src/sculpt.js';
 import { createUvEditor } from './src/uv_editor.js';
 import { createWorkspaceModeController } from './src/workspace_mode.js';
 
@@ -51,6 +50,8 @@ const getCurrentUvSession = () => {
 };
 
 const refreshTextureTools = () => {
+    textureManager.setQuickApplyAvailable(selectionManager?.hasUvTarget?.('selection') ?? false);
+
     if (!ui.isTextureManagerVisible()) {
         return;
     }
@@ -135,17 +136,6 @@ attachMouseBlockControls({
     onUpdate: updateUI
 });
 
-const sculptControls = attachSculptControls({
-    scene,
-    camera,
-    renderer,
-    controls,
-    state,
-    blockManager,
-    undoManager,
-    onUpdate: updateUI
-});
-
 const workspaceModeController = createWorkspaceModeController({
     scene,
     camera,
@@ -175,13 +165,10 @@ ui.onControlModeChange((mode) => {
     state.controlMode = mode;
     selectionManager.clearSelection();
     state.pathPoints = [state.currentPosition.clone()];
-    ui.showSculptControls(mode === 'sculpt');
-    sculptControls.refreshMode();
     updateUI();
 });
 ui.setControlMode(state.controlMode);
 ui.setWorkMode(state.workMode);
-ui.showSculptControls(state.controlMode === 'sculpt');
 ui.setTextureTargetScope('selection');
 
 ui.onWorkModeToggle((mode) => {
@@ -195,18 +182,12 @@ ui.onGeometryChange((type) => {
     state.currentGeometryType = type;
 });
 
-ui.onSculptModeChange((mode) => {
-    state.sculptMode = mode;
-});
-ui.setSculptMode(state.sculptMode);
-
-ui.onSculptRadiusChange((radius) => {
-    state.sculptRadius = radius;
-});
-ui.setSculptRadius(state.sculptRadius);
-
 textureManager.onApply((texture) => {
     selectionManager.applyTexture(getCurrentTextureScope(), texture);
+    refreshTextureTools();
+});
+textureManager.onQuickApply((texture) => {
+    selectionManager.applyTexture('selection', texture);
     refreshTextureTools();
 });
 textureManager.onSelectionChange(() => {

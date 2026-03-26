@@ -6,6 +6,36 @@ function clonePoints(points) {
     return points.map(clonePoint);
 }
 
+function createIdentityMapping() {
+    return {
+        scaleX: 1,
+        scaleY: 1,
+        offsetX: 0,
+        offsetY: 0
+    };
+}
+
+function cloneMapping(mapping) {
+    return {
+        scaleX: mapping.scaleX,
+        scaleY: mapping.scaleY,
+        offsetX: mapping.offsetX,
+        offsetY: mapping.offsetY
+    };
+}
+
+function mapPoint(point, mapping) {
+    return {
+        id: point.id,
+        x: mapping.offsetX + (point.x * mapping.scaleX),
+        y: mapping.offsetY + (point.y * mapping.scaleY)
+    };
+}
+
+function mapPoints(points, mapping) {
+    return points.map((point) => mapPoint(point, mapping));
+}
+
 function getBounds(points) {
     if (!points || points.length === 0) {
         return null;
@@ -62,7 +92,8 @@ export function createUvEditor() {
     const HANDLE_RADIUS_PX = 8;
     const FRAME_PADDING_PX = 18;
     let session = null;
-    let workingPoints = [];
+    let displayPoints = [];
+    let uvMapping = createIdentityMapping();
     let interaction = null;
 
     function resizeCanvas() {
@@ -129,10 +160,50 @@ export function createUvEditor() {
         const image = session?.texture?.image;
         if (!image) return;
 
+        const minActualX = Math.min(uvMapping.offsetX, uvMapping.offsetX + uvMapping.scaleX);
+        const maxActualX = Math.max(uvMapping.offsetX, uvMapping.offsetX + uvMapping.scaleX);
+        const minActualY = Math.min(uvMapping.offsetY, uvMapping.offsetY + uvMapping.scaleY);
+        const maxActualY = Math.max(uvMapping.offsetY, uvMapping.offsetY + uvMapping.scaleY);
+        const startTileX = Math.floor(minActualX);
+        const endTileX = Math.ceil(maxActualX);
+        const startTileY = Math.floor(minActualY);
+        const endTileY = Math.ceil(maxActualY);
+
+        ctx.save();
         try {
-            ctx.drawImage(image, viewport.offsetX, viewport.offsetY, viewport.size, viewport.size);
+            ctx.beginPath();
+            ctx.rect(viewport.offsetX, viewport.offsetY, viewport.size, viewport.size);
+            ctx.clip();
+
+            for (let tileX = startTileX; tileX < endTileX; tileX++) {
+                for (let tileY = startTileY; tileY < endTileY; tileY++) {
+                    const displayMinX = (tileX - uvMapping.offsetX) / uvMapping.scaleX;
+                    const displayMaxX = ((tileX + 1) - uvMapping.offsetX) / uvMapping.scaleX;
+                    const displayMinY = (tileY - uvMapping.offsetY) / uvMapping.scaleY;
+                    const displayMaxY = ((tileY + 1) - uvMapping.offsetY) / uvMapping.scaleY;
+
+                    const uvMinX = Math.min(displayMinX, displayMaxX);
+                    const uvMaxX = Math.max(displayMinX, displayMaxX);
+                    const uvMinY = Math.min(displayMinY, displayMaxY);
+                    const uvMaxY = Math.max(displayMinY, displayMaxY);
+
+                    if (uvMaxX <= 0 || uvMinX >= 1 || uvMaxY <= 0 || uvMinY >= 1) {
+                        continue;
+                    }
+
+                    const topLeft = uvToCanvas({ x: uvMinX, y: uvMaxY }, viewport);
+                    const bottomRight = uvToCanvas({ x: uvMaxX, y: uvMinY }, viewport);
+                    const width = bottomRight.x - topLeft.x;
+                    const height = bottomRight.y - topLeft.y;
+
+                    ctx.drawImage(image, topLeft.x, topLeft.y, width, height);
+                }
+            }
+
         } catch {
             // Ignore drawing errors while the image is still decoding.
+        } finally {
+            ctx.restore();
         }
     }
 
@@ -206,20 +277,20 @@ export function createUvEditor() {
         ctx.strokeRect(viewport.offsetX, viewport.offsetY, viewport.size, viewport.size);
         ctx.restore();
 
-        if (!session || workingPoints.length === 0) {
+        if (!session || displayPoints.length === 0) {
             if (emptyMessage) emptyMessage.style.display = 'block';
             return;
         }
 
         if (emptyMessage) emptyMessage.style.display = 'none';
 
-        const pointsById = new Map(workingPoints.map((point) => [point.id, point]));
+        const pointsById = new Map(displayPoints.map((point) => [point.id, point]));
         drawWireframe(viewport, pointsById);
-        drawBounds(getBounds(workingPoints), viewport);
+        drawBounds(getBounds(displayPoints), viewport);
     }
 
     function findHandle(pointer, viewport) {
-        const bounds = getBounds(workingPoints);
+        const bounds = getBounds(displayPoints);
         for (const handle of createHandleDescriptors(bounds)) {
             const point = uvToCanvas(handle, viewport);
             const dx = point.x - pointer.x;
@@ -242,7 +313,7 @@ export function createUvEditor() {
     }
 
     function updateCursor(event) {
-        if (!session || workingPoints.length === 0) {
+        if (!session || displayPoints.length === 0) {
             canvas.style.cursor = 'default';
             return;
         }
@@ -256,21 +327,21 @@ export function createUvEditor() {
         }
 
         const pointerUv = canvasToUv(pointer.x, pointer.y, viewport);
-        canvas.style.cursor = pointInsideBounds(pointerUv, getBounds(workingPoints)) ? 'move' : 'default';
+        canvas.style.cursor = pointInsideBounds(pointerUv, getBounds(displayPoints)) ? 'move' : 'default';
     }
 
-    function syncPoints(nextPoints) {
-        workingPoints = clonePoints(nextPoints);
+    function syncDisplayPoints(nextPoints) {
+        displayPoints = clonePoints(nextPoints);
         render();
     }
 
     function beginInteraction(event) {
-        if (!session || workingPoints.length === 0 || event.button !== 0) return;
+        if (!session || displayPoints.length === 0 || event.button !== 0) return;
 
         const viewport = getViewport();
         const pointer = getPointerPosition(event);
         const pointerUv = canvasToUv(pointer.x, pointer.y, viewport);
-        const bounds = getBounds(workingPoints);
+        const bounds = getBounds(displayPoints);
         const handle = findHandle(pointer, viewport);
 
         if (!handle && !pointInsideBounds(pointerUv, bounds)) {
@@ -289,8 +360,8 @@ export function createUvEditor() {
             handle: handle?.name ?? null,
             anchor: handle ? anchors[handle.name] : null,
             startPointer: pointerUv,
-            startPoints: clonePoints(workingPoints),
-            startBounds: bounds
+            startBounds: bounds,
+            startMapping: cloneMapping(uvMapping)
         };
 
         canvas.setPointerCapture(event.pointerId);
@@ -306,16 +377,13 @@ export function createUvEditor() {
         const viewport = getViewport();
         const pointer = getPointerPosition(event);
         const pointerUv = canvasToUv(pointer.x, pointer.y, viewport);
-        let nextPoints = clonePoints(interaction.startPoints);
+        let nextMapping = cloneMapping(interaction.startMapping);
 
         if (interaction.type === 'move') {
             const dx = pointerUv.x - interaction.startPointer.x;
             const dy = pointerUv.y - interaction.startPointer.y;
-            nextPoints = interaction.startPoints.map((point) => ({
-                id: point.id,
-                x: point.x + dx,
-                y: point.y + dy
-            }));
+            nextMapping.offsetX = interaction.startMapping.offsetX - (interaction.startMapping.scaleX * dx);
+            nextMapping.offsetY = interaction.startMapping.offsetY - (interaction.startMapping.scaleY * dy);
         } else if (interaction.type === 'scale' && interaction.anchor) {
             const handlePoint = {
                 nw: { x: interaction.startBounds.minX, y: interaction.startBounds.maxY },
@@ -329,18 +397,22 @@ export function createUvEditor() {
             let scaleX = startVectorX === 0 ? 1 : (pointerUv.x - interaction.anchor.x) / startVectorX;
             let scaleY = startVectorY === 0 ? 1 : (pointerUv.y - interaction.anchor.y) / startVectorY;
 
-            if (Math.abs(scaleX) < 0.05) scaleX = 0.05 * Math.sign(scaleX || 1);
-            if (Math.abs(scaleY) < 0.05) scaleY = 0.05 * Math.sign(scaleY || 1);
+            if (scaleX < 0.05) scaleX = 0.05;
+            if (scaleY < 0.05) scaleY = 0.05;
 
-            nextPoints = interaction.startPoints.map((point) => ({
-                id: point.id,
-                x: interaction.anchor.x + (point.x - interaction.anchor.x) * scaleX,
-                y: interaction.anchor.y + (point.y - interaction.anchor.y) * scaleY
-            }));
+            nextMapping.scaleX = interaction.startMapping.scaleX / scaleX;
+            nextMapping.scaleY = interaction.startMapping.scaleY / scaleY;
+            nextMapping.offsetX = interaction.startMapping.offsetX + (
+                interaction.startMapping.scaleX * interaction.anchor.x * (1 - (1 / scaleX))
+            );
+            nextMapping.offsetY = interaction.startMapping.offsetY + (
+                interaction.startMapping.scaleY * interaction.anchor.y * (1 - (1 / scaleY))
+            );
         }
 
-        session.update(nextPoints);
-        syncPoints(nextPoints);
+        uvMapping = nextMapping;
+        session.update(mapPoints(displayPoints, uvMapping));
+        render();
         event.preventDefault();
     }
 
@@ -367,14 +439,16 @@ export function createUvEditor() {
         resetButton.addEventListener('click', () => {
             if (!session) return;
             const nextData = session.reset();
-            syncPoints(nextData.points);
+            uvMapping = createIdentityMapping();
+            syncDisplayPoints(nextData.points);
         });
     }
 
     if (closeButton) {
         closeButton.addEventListener('click', () => {
             session = null;
-            workingPoints = [];
+            displayPoints = [];
+            uvMapping = createIdentityMapping();
             interaction = null;
             canvas.style.cursor = 'default';
             render();
@@ -386,14 +460,19 @@ export function createUvEditor() {
 
     return {
         show(nextSession) {
+            const sameSessionTarget = session?.signature && nextSession?.signature && session.signature === nextSession.signature;
             session = nextSession;
-            workingPoints = clonePoints(nextSession?.points ?? []);
+            if (!sameSessionTarget) {
+                displayPoints = clonePoints(nextSession?.points ?? []);
+                uvMapping = createIdentityMapping();
+            }
             canvas.style.cursor = 'default';
             render();
         },
         hide() {
             session = null;
-            workingPoints = [];
+            displayPoints = [];
+            uvMapping = createIdentityMapping();
             interaction = null;
             canvas.style.cursor = 'default';
             render();

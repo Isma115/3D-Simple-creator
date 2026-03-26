@@ -3,8 +3,8 @@ import { getBestAxis, getVertexKey, getEdgePlaneCandidates, getPlaneKey, pointsE
 import { FACE_EPSILON, STEP_SIZE } from './constants.js';
 import { drawLineBetweenPoints } from './input.js';
 
-const FACE_HOVER_EMISSIVE = 0x333333;
-const FACE_SELECTED_EMISSIVE = 0x555500;
+const FACE_HOVER_EMISSIVE = 0x7ee8a0;
+const FACE_SELECTED_EMISSIVE = 0x1fb655;
 
 function getSelectedFaces(state) {
     if (!state.selectedFace) return [];
@@ -47,6 +47,59 @@ function clearMeshEmissive(mesh) {
     if (mesh.material.emissive) {
         mesh.material.emissive.setHex(0x000000);
     }
+}
+
+function getFaceIdentity(face) {
+    if (!face?.mesh) return '';
+    if (face.data?.type === 'block' && !face.applyToWholeMesh) {
+        return `block:${face.mesh.uuid}:${getBlockMaterialIndex(face)}`;
+    }
+    return `mesh:${face.mesh.uuid}`;
+}
+
+function getFaceTriangles(face) {
+    if (!face?.mesh) return [];
+    if (face.data?.type === 'block' && !face.applyToWholeMesh) {
+        return getBlockFaceTriangles(face.mesh, face.faceIndex);
+    }
+    return getAllTriangles(face.mesh);
+}
+
+function createFaceOverlayMesh(face, color, opacity) {
+    const geometry = face?.mesh?.geometry;
+    const positionAttribute = geometry?.getAttribute?.('position');
+    if (!geometry || !positionAttribute) return null;
+
+    const positions = [];
+    for (const triangle of getFaceTriangles(face)) {
+        for (const index of triangle) {
+            const vertex = new THREE.Vector3()
+                .fromBufferAttribute(positionAttribute, index)
+                .applyMatrix4(face.mesh.matrixWorld);
+            positions.push(vertex.x, vertex.y, vertex.z);
+        }
+    }
+
+    if (positions.length === 0) return null;
+
+    const overlayGeometry = new THREE.BufferGeometry();
+    overlayGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    overlayGeometry.computeVertexNormals();
+
+    const overlayMaterial = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2
+    });
+
+    const overlayMesh = new THREE.Mesh(overlayGeometry, overlayMaterial);
+    overlayMesh.renderOrder = 12;
+    return overlayMesh;
 }
 
 function cloneTextureForFace(texture) {
@@ -196,6 +249,19 @@ function buildUvEditorPayload(targets) {
     return { points, triangles };
 }
 
+function buildUvSessionSignature(targets) {
+    const refIds = [];
+
+    for (const target of targets) {
+        for (const ref of target.refs) {
+            refIds.push(ref.id);
+        }
+    }
+
+    refIds.sort();
+    return refIds.join('|');
+}
+
 function findProjectionBasis(targets) {
     for (const target of targets) {
         for (const triangle of target.triangles) {
@@ -285,11 +351,29 @@ function applyUvPointMap(targets, pointMap) {
     return buildUvEditorPayload(targets);
 }
 
-function assignTextureToFaces(selectedFaces, texture) {
+function buildCurrentUvMap(targets) {
+    const pointMap = new Map();
+
+    for (const target of targets) {
+        for (const ref of target.refs) {
+            if (pointMap.has(ref.id)) continue;
+            pointMap.set(ref.id, new THREE.Vector2(
+                target.uvAttribute.getX(ref.uvIndex),
+                target.uvAttribute.getY(ref.uvIndex)
+            ));
+        }
+    }
+
+    return pointMap;
+}
+
+function assignTextureToFaces(selectedFaces, texture, { preserveUvLayout = false } = {}) {
     if (!texture || selectedFaces.length === 0) return false;
 
     const targets = collectUvTargets(selectedFaces);
-    const fittedMap = buildFittedUvMap(targets);
+    const pointMap = preserveUvLayout
+        ? buildCurrentUvMap(targets)
+        : buildFittedUvMap(targets);
 
     selectedFaces.forEach((face) => {
         if (face.data?.type === 'block') {
@@ -319,12 +403,7 @@ function assignTextureToFaces(selectedFaces, texture) {
         face.mesh.material = nextMaterial;
     });
 
-    applyUvPointMap(targets, fittedMap);
-    selectedFaces.forEach((face) => {
-        if (!face.applyToWholeMesh) {
-            setFaceEmissive(face, FACE_SELECTED_EMISSIVE);
-        }
-    });
+    applyUvPointMap(targets, pointMap);
     return true;
 }
 
@@ -343,7 +422,7 @@ function createUvEditorSession(selectedFaces, fallbackTexture) {
     const sourceTexture = getSelectionTexture(selectedFaces) ?? fallbackTexture;
     if (!selectionHasTexture) {
         if (!sourceTexture) return null;
-        assignTextureToFaces(selectedFaces, sourceTexture);
+        assignTextureToFaces(selectedFaces, sourceTexture, { preserveUvLayout: false });
     }
 
     const targets = collectUvTargets(selectedFaces);
@@ -351,6 +430,7 @@ function createUvEditorSession(selectedFaces, fallbackTexture) {
     const payload = buildUvEditorPayload(targets);
 
     return {
+        signature: buildUvSessionSignature(targets),
         texture: getSelectionTexture(selectedFaces),
         points: payload.points,
         triangles: payload.triangles,
@@ -412,7 +492,10 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     document.body.appendChild(joinMenu);
     const DRAG_SCALE = STEP_SIZE / 50;
     let dragState = null;
+    let clickDragState = null;
     let suppressClick = false;
+    let hoveredFacePreviewMeshes = [];
+    let selectedFacePreviewMeshes = [];
 
     function updateMouse(event) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -554,6 +637,25 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         joinMenu.style.display = 'none';
     }
 
+    function clearFacePreviewMeshes(meshes) {
+        meshes.forEach((mesh) => {
+            scene.remove(mesh);
+            mesh.geometry?.dispose?.();
+            mesh.material?.dispose?.();
+        });
+        meshes.length = 0;
+    }
+
+    function setFacePreviewMeshes(targetMeshes, faces, color, opacity) {
+        clearFacePreviewMeshes(targetMeshes);
+        for (const face of faces) {
+            const overlayMesh = createFaceOverlayMesh(face, color, opacity);
+            if (!overlayMesh) continue;
+            targetMeshes.push(overlayMesh);
+            scene.add(overlayMesh);
+        }
+    }
+
     function getEntryKey(entry) {
         if (!entry) return null;
         return entry.vertexKey ?? getVertexKey(entry.position);
@@ -641,7 +743,182 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         };
     }
 
-    // Helper to get contiguous blocks that share the same normal and are adjacent
+    function getFaceProjectionAxes(normal) {
+        const absX = Math.abs(normal.x);
+        const absY = Math.abs(normal.y);
+        const absZ = Math.abs(normal.z);
+
+        if (absX >= absY && absX >= absZ) return ['y', 'z'];
+        if (absY >= absX && absY >= absZ) return ['x', 'z'];
+        return ['x', 'y'];
+    }
+
+    function getProjectedFaceBounds(mesh, faceIndex, worldNormal) {
+        const positionAttribute = mesh.geometry?.attributes?.position;
+        if (!positionAttribute) return null;
+
+        const [uAxis, vAxis] = getFaceProjectionAxes(worldNormal);
+        const seen = new Set();
+        let minU = Infinity;
+        let maxU = -Infinity;
+        let minV = Infinity;
+        let maxV = -Infinity;
+
+        for (const triangle of getBlockFaceTriangles(mesh, faceIndex)) {
+            for (const vertexIndex of triangle) {
+                if (seen.has(vertexIndex)) continue;
+                seen.add(vertexIndex);
+
+                const vertex = new THREE.Vector3()
+                    .fromBufferAttribute(positionAttribute, vertexIndex)
+                    .applyMatrix4(mesh.matrixWorld);
+                minU = Math.min(minU, vertex[uAxis]);
+                maxU = Math.max(maxU, vertex[uAxis]);
+                minV = Math.min(minV, vertex[vAxis]);
+                maxV = Math.max(maxV, vertex[vAxis]);
+            }
+        }
+
+        if (!Number.isFinite(minU) || !Number.isFinite(minV)) return null;
+
+        return { minU, maxU, minV, maxV };
+    }
+
+    function rangesOverlapWithLength(minA, maxA, minB, maxB, epsilon = 1e-4) {
+        return (Math.min(maxA, maxB) - Math.max(minA, minB)) > epsilon;
+    }
+
+    function faceBoundsShareEdge(a, b, epsilon = 1e-4) {
+        const touchVertical =
+            (Math.abs(a.maxU - b.minU) <= epsilon || Math.abs(b.maxU - a.minU) <= epsilon) &&
+            rangesOverlapWithLength(a.minV, a.maxV, b.minV, b.maxV, epsilon);
+        const touchHorizontal =
+            (Math.abs(a.maxV - b.minV) <= epsilon || Math.abs(b.maxV - a.minV) <= epsilon) &&
+            rangesOverlapWithLength(a.minU, a.maxU, b.minU, b.maxU, epsilon);
+        return touchVertical || touchHorizontal;
+    }
+
+    function nearlyEqual(a, b, epsilon = 1e-4) {
+        return Math.abs(a - b) <= epsilon;
+    }
+
+    function buildUniformFaceGrid(candidates, startBounds, epsilon = 1e-4) {
+        const width = startBounds.maxU - startBounds.minU;
+        const height = startBounds.maxV - startBounds.minV;
+        if (width <= epsilon || height <= epsilon) return null;
+
+        const compatible = candidates.filter((candidate) => {
+            const candidateWidth = candidate.bounds.maxU - candidate.bounds.minU;
+            const candidateHeight = candidate.bounds.maxV - candidate.bounds.minV;
+            return nearlyEqual(candidateWidth, width, epsilon) && nearlyEqual(candidateHeight, height, epsilon);
+        });
+
+        const map = new Map();
+        for (const candidate of compatible) {
+            const col = Math.round((candidate.bounds.minU - startBounds.minU) / width);
+            const row = Math.round((candidate.bounds.minV - startBounds.minV) / height);
+            map.set(`${col},${row}`, { ...candidate, col, row });
+        }
+
+        return { width, height, map };
+    }
+
+    function getRectangleCellsFromGrid(grid, startCell) {
+        if (!grid || !startCell) return [];
+
+        const { map } = grid;
+
+        function hasCell(col, row) {
+            return map.has(`${col},${row}`);
+        }
+
+        function getCell(col, row) {
+            return map.get(`${col},${row}`) ?? null;
+        }
+
+        function expandHorizontal(col, row) {
+            let minCol = col;
+            let maxCol = col;
+            while (hasCell(minCol - 1, row)) minCol -= 1;
+            while (hasCell(maxCol + 1, row)) maxCol += 1;
+            return { minCol, maxCol };
+        }
+
+        function expandVertical(col, row) {
+            let minRow = row;
+            let maxRow = row;
+            while (hasCell(col, minRow - 1)) minRow -= 1;
+            while (hasCell(col, maxRow + 1)) maxRow += 1;
+            return { minRow, maxRow };
+        }
+
+        function canFillRow(row, minCol, maxCol) {
+            for (let col = minCol; col <= maxCol; col++) {
+                if (!hasCell(col, row)) return false;
+            }
+            return true;
+        }
+
+        function canFillColumn(col, minRow, maxRow) {
+            for (let row = minRow; row <= maxRow; row++) {
+                if (!hasCell(col, row)) return false;
+            }
+            return true;
+        }
+
+        function buildHorizontalFirstRectangle() {
+            const horizontal = expandHorizontal(startCell.col, startCell.row);
+            let minRow = startCell.row;
+            let maxRow = startCell.row;
+
+            while (canFillRow(minRow - 1, horizontal.minCol, horizontal.maxCol)) minRow -= 1;
+            while (canFillRow(maxRow + 1, horizontal.minCol, horizontal.maxCol)) maxRow += 1;
+
+            return {
+                minCol: horizontal.minCol,
+                maxCol: horizontal.maxCol,
+                minRow,
+                maxRow
+            };
+        }
+
+        function buildVerticalFirstRectangle() {
+            const vertical = expandVertical(startCell.col, startCell.row);
+            let minCol = startCell.col;
+            let maxCol = startCell.col;
+
+            while (canFillColumn(minCol - 1, vertical.minRow, vertical.maxRow)) minCol -= 1;
+            while (canFillColumn(maxCol + 1, vertical.minRow, vertical.maxRow)) maxCol += 1;
+
+            return {
+                minCol,
+                maxCol,
+                minRow: vertical.minRow,
+                maxRow: vertical.maxRow
+            };
+        }
+
+        function rectangleArea(rectangle) {
+            return (rectangle.maxCol - rectangle.minCol + 1) * (rectangle.maxRow - rectangle.minRow + 1);
+        }
+
+        const horizontalRectangle = buildHorizontalFirstRectangle();
+        const verticalRectangle = buildVerticalFirstRectangle();
+        const chosenRectangle = rectangleArea(horizontalRectangle) >= rectangleArea(verticalRectangle)
+            ? horizontalRectangle
+            : verticalRectangle;
+
+        const cells = [];
+        for (let row = chosenRectangle.minRow; row <= chosenRectangle.maxRow; row++) {
+            for (let col = chosenRectangle.minCol; col <= chosenRectangle.maxCol; col++) {
+                const cell = getCell(col, row);
+                if (cell) cells.push(cell);
+            }
+        }
+
+        return cells;
+    }
+
     function getJointFaceBlocks(startMesh, faceIndex) {
         if (!blockManager) return [ { mesh: startMesh, faceIndex } ];
         
@@ -666,17 +943,12 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         const planePoint = a.clone().applyMatrix4(startMesh.matrixWorld);
         const planeD = worldNormal.dot(planePoint);
         
-        const allBlocks = blockManager.getBlockEntries().filter(e => e.active);
-        
-        // Flood fill variables
-        const result = [];
-        const visited = new Set();
-        const queue = [ startMesh ];
-        visited.add(startMesh.uuid);
-        
-        // We find the face index for a given normal
+        const allBlocks = blockManager.getBlockEntries().filter((entry) => entry.active);
+        const jointSelectionType = document.querySelector('input[name="joint-face-selection-type"]:checked')?.value ?? 'type-2';
+
         function getFaceIndexForNormal(mesh, targetNormal) {
             const geom = mesh.geometry;
+            if (!geom?.index || !geom?.attributes?.position) return -1;
             const _normal = new THREE.Vector3();
             const _nMat = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
             
@@ -702,115 +974,106 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             }
             return -1;
         }
-        
-        while (queue.length > 0) {
-            const currentMesh = queue.shift();
-            const currentEntry = blockManager.getBlockByMesh(currentMesh);
-            if (!currentEntry) continue;
-            
-            const fIndex = getFaceIndexForNormal(currentMesh, worldNormal);
-            if (fIndex === -1) continue; // Face is not on the same plane
-            
-            result.push({ mesh: currentMesh, data: { type: 'block', entry: currentEntry }, faceIndex: fIndex });
-            
-            // Find adjacent blocks
-            const size = currentEntry.size;
-            
-            for (const other of allBlocks) {
-                if (visited.has(other.mesh.uuid)) continue;
-                if (other.size !== size) continue; // Simplify: only same-sized blocks connect perfectly
-                
-                // Are they adjacent? (Distance is exactly 'size' in one axis, 0 in others)
-                const dx = Math.abs(currentEntry.position.x - other.position.x);
-                const dy = Math.abs(currentEntry.position.y - other.position.y);
-                const dz = Math.abs(currentEntry.position.z - other.position.z);
-                
-                // Check if they are exactly adjacent (share a face)
-                const dSum = dx + dy + dz;
-                const isAdjacent = Math.abs(dSum - size) < 1e-4 && 
-                                   ((dx < 1e-4 && dy < 1e-4) || 
-                                    (dx < 1e-4 && dz < 1e-4) || 
-                                    (dy < 1e-4 && dz < 1e-4));
-                                    
-                if (isAdjacent) {
-                    visited.add(other.mesh.uuid);
-                    queue.push(other.mesh);
+
+        const candidates = [];
+        for (const entry of allBlocks) {
+            if (!entry.mesh) continue;
+            const candidateFaceIndex = getFaceIndexForNormal(entry.mesh, worldNormal);
+            if (candidateFaceIndex === -1) continue;
+
+            const bounds = getProjectedFaceBounds(entry.mesh, candidateFaceIndex, worldNormal);
+            if (!bounds) continue;
+
+            candidates.push({
+                mesh: entry.mesh,
+                entry,
+                faceIndex: candidateFaceIndex,
+                bounds
+            });
+        }
+
+        const startCandidate = candidates.find((candidate) => candidate.mesh === startMesh);
+        if (!startCandidate) {
+            return [{ mesh: startMesh, data: { type: 'block', entry: blockManager.getBlockByMesh(startMesh) }, faceIndex }];
+        }
+
+        let selectedCandidates = [startCandidate];
+
+        if (jointSelectionType === 'type-1') {
+            const visited = new Set([startCandidate.mesh.uuid]);
+            const queue = [startCandidate];
+            const connectedCandidates = [];
+
+            while (queue.length > 0) {
+                const current = queue.shift();
+                connectedCandidates.push(current);
+
+                for (const candidate of candidates) {
+                    if (visited.has(candidate.mesh.uuid)) continue;
+                    if (!faceBoundsShareEdge(current.bounds, candidate.bounds)) continue;
+                    visited.add(candidate.mesh.uuid);
+                    queue.push(candidate);
                 }
             }
+
+            selectedCandidates = connectedCandidates;
+        } else {
+            const uniformGrid = buildUniformFaceGrid(candidates, startCandidate.bounds);
+            const rectangleCells = getRectangleCellsFromGrid(uniformGrid, uniformGrid?.map.get('0,0') ?? null);
+            selectedCandidates = rectangleCells.length > 0 ? rectangleCells : [startCandidate];
         }
+
+        const result = [];
+        for (const candidate of selectedCandidates) {
+            result.push({
+                mesh: candidate.mesh,
+                data: { type: 'block', entry: candidate.entry },
+                faceIndex: candidate.faceIndex
+            });
+        }
+
         return result;
     }
 
     function handleFaceHover(nextFace) {
         const isJoint = document.getElementById('joint-face-checkbox')?.checked;
-        
-        // Revert previous hover
-        if (state.hoveredFace) {
-            const facesToRevert = Array.isArray(state.hoveredFace) ? state.hoveredFace : [state.hoveredFace];
-            facesToRevert.forEach(face => {
-                if (!face) return;
-                clearMeshEmissive(face.mesh);
-            });
-            state.hoveredFace = null;
-        }
+
+        state.hoveredFace = null;
+        clearFacePreviewMeshes(hoveredFacePreviewMeshes);
 
         if (!nextFace) return;
-        
+
         let facesToHover = [nextFace];
         if (isJoint && nextFace.data && nextFace.data.type === 'block') {
             facesToHover = getJointFaceBlocks(nextFace.mesh, nextFace.faceIndex);
         }
-        
-        state.hoveredFace = facesToHover;
 
-        // Apply new hover
-        facesToHover.forEach(face => {
-            let isSelected = false;
-            if (state.selectedFace) {
-                const selFaces = Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
-                isSelected = selFaces.some(sf => sf.mesh === face.mesh && sf.faceIndex === face.faceIndex);
-            }
-            
-            if (!isSelected) {
-                setFaceEmissive(face, FACE_HOVER_EMISSIVE);
-            }
-        });
-        
-        // Ensure selected faces remain yellow
-        if (state.selectedFace) {
-            const selFaces = Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
-            selFaces.forEach(face => {
-                 setFaceEmissive(face, FACE_SELECTED_EMISSIVE);
-            });
-        }
+        state.hoveredFace = facesToHover;
+        const selectedFaceIds = new Set(getSelectedFaces(state).map((face) => getFaceIdentity(face)));
+        const previewFaces = facesToHover.filter((face) => !selectedFaceIds.has(getFaceIdentity(face)));
+        setFacePreviewMeshes(hoveredFacePreviewMeshes, previewFaces, FACE_HOVER_EMISSIVE, 0.34);
     }
 
     function handleFaceSelect(nextFace) {
         const isJoint = document.getElementById('joint-face-checkbox')?.checked;
-        
-        if (state.selectedFace) {
-             const facesToRevert = Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
-             facesToRevert.forEach(face => {
-                 clearMeshEmissive(face.mesh);
-             });
-             state.selectedFace = null;
-        }
+
+        state.selectedFace = null;
+        clearFacePreviewMeshes(selectedFacePreviewMeshes);
 
         if (!nextFace) {
+            handleFaceHover(state.hoveredFace?.[0] ?? null);
             onUpdate();
             return;
         }
-        
+
         let facesToSelect = [nextFace];
         if (isJoint && nextFace.data && nextFace.data.type === 'block') {
             facesToSelect = getJointFaceBlocks(nextFace.mesh, nextFace.faceIndex);
         }
 
         state.selectedFace = facesToSelect;
-
-        facesToSelect.forEach(face => {
-             setFaceEmissive(face, FACE_SELECTED_EMISSIVE);
-        });
+        setFacePreviewMeshes(selectedFacePreviewMeshes, facesToSelect, FACE_SELECTED_EMISSIVE, 0.52);
+        handleFaceHover(nextFace);
         onUpdate();
     }
 
@@ -1192,6 +1455,13 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             return;
         }
         updateMouse(event);
+        if (clickDragState && (event.buttons & 1) !== 0) {
+            const dx = event.clientX - clickDragState.startX;
+            const dy = event.clientY - clickDragState.startY;
+            if ((dx * dx) + (dy * dy) > 16) {
+                clickDragState.moved = true;
+            }
+        }
         if (dragState) {
             event.preventDefault();
             event.stopPropagation();
@@ -1213,16 +1483,6 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (state.controlMode === 'points') {
             const entry = pickEntry(true);
             handleHover(entry);
-            handleBlockHover(null);
-            handleGridHover(null);
-            handleFaceHover(null);
-            hideJoinMenu();
-            hideLinePreview();
-            return;
-        }
-
-        if (state.controlMode === 'sculpt') {
-            handleHover(null);
             handleBlockHover(null);
             handleGridHover(null);
             handleFaceHover(null);
@@ -1302,15 +1562,6 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleGridHover(null);
             return;
         }
-        if (state.controlMode === 'sculpt') {
-            hideJoinMenu();
-            hideLinePreview();
-            handleHover(null);
-            handleBlockHover(null);
-            handleGridHover(null);
-            handleFaceHover(null);
-            return;
-        }
         const entry = pickEntry(true);
         if (event.shiftKey) {
             if (!entry) {
@@ -1364,6 +1615,13 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     function onPointerDown(event) {
         if (state.workMode !== 'classic') return;
         if (event.button !== 0) return;
+        if (state.controlMode === 'select-face') {
+            clickDragState = {
+                startX: event.clientX,
+                startY: event.clientY,
+                moved: false
+            };
+        }
         if (state.controlMode !== 'points') return;
         if (!event.shiftKey) return;
         updateMouse(event);
@@ -1376,6 +1634,12 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function onPointerUp(event) {
+        if (clickDragState) {
+            if (clickDragState.moved) {
+                suppressClick = true;
+            }
+            clickDragState = null;
+        }
         if (!dragState) return;
         const moved = Math.abs(event.clientY - dragState.startMouseY) > 2;
         suppressClick = moved;
@@ -1414,6 +1678,8 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             hideJoinMenu();
             handleFaceSelect(null);
             handleFaceHover(null);
+            clearFacePreviewMeshes(hoveredFacePreviewMeshes);
+            clearFacePreviewMeshes(selectedFacePreviewMeshes);
             gridHoverMesh.visible = false;
             hideLinePreview();
         },
@@ -1432,7 +1698,8 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         applyTexture: (scope = 'selection', texture) => {
             const targets = getUvTargets(scope);
             if (targets.length === 0) return false;
-            const applied = assignTextureToFaces(targets, texture);
+            const preserveUvLayout = targets.every((face) => Boolean(getFaceMaterial(face)?.map));
+            const applied = assignTextureToFaces(targets, texture, { preserveUvLayout });
             if (applied) {
                 onUpdate();
             }

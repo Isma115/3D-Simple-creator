@@ -15,10 +15,6 @@ export function createUI() {
     const geometryInventory = document.getElementById('geometry-inventory');
     const exportGltfButton = document.getElementById('export-gltf-btn');
     const exportObjButton = document.getElementById('export-obj-btn');
-    const sculptPanel = document.getElementById('sculpt-panel');
-    const sculptModeInputs = Array.from(document.querySelectorAll('input[name="sculpt-mode"]'));
-    const sculptRadiusInput = document.getElementById('sculpt-radius-input');
-    const sculptRadiusValue = document.getElementById('sculpt-radius-value');
     const openUvEditorButton = document.getElementById('open-uv-editor-btn');
     const textureScopeInputs = Array.from(document.querySelectorAll('input[name="texture-target-scope"]'));
     const textureModal = document.getElementById('texture-modal');
@@ -211,47 +207,6 @@ export function createUI() {
         }
     }
 
-    function onSculptModeChange(handler) {
-        if (sculptModeInputs.length === 0) return;
-        for (const input of sculptModeInputs) {
-            input.addEventListener('change', () => {
-                if (input.checked) handler(input.value);
-            });
-        }
-    }
-
-    function setSculptMode(value) {
-        if (sculptModeInputs.length === 0) return;
-        for (const input of sculptModeInputs) {
-            input.checked = input.value === value;
-        }
-    }
-
-    function updateSculptRadiusLabel(value) {
-        if (!sculptRadiusValue) return;
-        sculptRadiusValue.textContent = Number(value).toFixed(1);
-    }
-
-    function onSculptRadiusChange(handler) {
-        if (!sculptRadiusInput) return;
-        sculptRadiusInput.addEventListener('input', () => {
-            const value = Number(sculptRadiusInput.value);
-            updateSculptRadiusLabel(value);
-            handler(value);
-        });
-    }
-
-    function setSculptRadius(value) {
-        if (!sculptRadiusInput) return;
-        sculptRadiusInput.value = String(value);
-        updateSculptRadiusLabel(value);
-    }
-
-    function showSculptControls(show) {
-        if (!sculptPanel) return;
-        sculptPanel.style.display = show ? 'flex' : 'none';
-    }
-
     if (closeTextureModalButton) {
         closeTextureModalButton.addEventListener('click', () => {
             showTextureManager(false);
@@ -295,11 +250,6 @@ export function createUI() {
         onTextureTargetScopeChange,
         getTextureTargetScope,
         setTextureTargetScope,
-        onGeometryChange,
-        onSculptModeChange,
-        setSculptMode,
-        onSculptRadiusChange,
-        setSculptRadius,
-        showSculptControls
+        onGeometryChange
     };
 }
