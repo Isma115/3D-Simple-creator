@@ -11,6 +11,7 @@ export function createBlockManager({ scene, state, entryManager }) {
     const BASE_COLOR = COLORS.face;
     const ACTIVE_COLOR = COLORS.line;
     const ACTIVE_EMISSIVE = 0x331100;
+    const OUTLINE_COLOR = 0xffffff;
 
     function addEntryToScene(entry) {
         if (!entry.inScene) {
@@ -31,6 +32,22 @@ export function createBlockManager({ scene, state, entryManager }) {
         point.position.copy(position);
         point.renderOrder = 2;
         return point;
+    }
+
+    function createBlockOutline(geometry) {
+        const edges = new THREE.EdgesGeometry(geometry);
+        const outline = new THREE.LineSegments(
+            edges,
+            new THREE.LineBasicMaterial({
+                color: OUTLINE_COLOR,
+                transparent: true,
+                opacity: 0.92,
+                depthWrite: false
+            })
+        );
+        outline.renderOrder = 3;
+        outline.scale.setScalar(1.001);
+        return outline;
     }
 
     function getBlockCorners(entry) {
@@ -108,6 +125,10 @@ export function createBlockManager({ scene, state, entryManager }) {
         if (material.emissive) {
             material.emissive.setHex(useActive ? ACTIVE_EMISSIVE : 0x000000);
         }
+        if (entry.outline?.material) {
+            entry.outline.material.color.setHex(OUTLINE_COLOR);
+            entry.outline.visible = entry.active;
+        }
         entry.mesh.visible = entry.active;
     }
 
@@ -125,27 +146,54 @@ export function createBlockManager({ scene, state, entryManager }) {
         return `${getVertexKey(position)}|${roundCoord(size)}`;
     }
 
-    function registerBlock(position, size = 1) {
+    function isPointInsideBlock(point, entry) {
+        const size = entry.size ?? 1;
+        const half = size / 2;
+        const epsilon = 1e-4;
+        return (
+            point.x >= entry.position.x - half - epsilon &&
+            point.x <= entry.position.x + half + epsilon &&
+            point.y >= entry.position.y - half - epsilon &&
+            point.y <= entry.position.y + half + epsilon &&
+            point.z >= entry.position.z - half - epsilon &&
+            point.z <= entry.position.z + half + epsilon
+        );
+    }
+
+    function isPositionOccupied(point, excludedEntry = null) {
+        return blockEntries.some((entry) => entry.active && entry !== excludedEntry && isPointInsideBlock(point, entry));
+    }
+
+    function registerBlock(position, size = 1, geometryTypeOverride = null) {
         const key = getBlockKey(position, size);
         const existing = blockEntriesByKey.get(key);
         if (existing) {
             const wasInactive = !existing.active;
             if (wasInactive) {
+                // Si el bloque existía y estaba inactivo, se reactiva.
+                // Como es tipo Minecraft, no cambiamos la geometría aquí para preservar como fue creado
                 existing.active = true;
                 refreshEntryVisibility(existing);
             }
             return { entry: existing, created: wasInactive };
         }
 
-        const mesh = new THREE.Mesh(state.blockGeometry, state.blockMaterial.clone());
+        const geometryType = geometryTypeOverride || state.currentGeometryType || 'cube';
+        const geometry = state.geometries[geometryType] || state.geometries.cube;
+
+        const mesh = new THREE.Mesh(geometry, state.blockMaterial.clone());
+        const outline = createBlockOutline(geometry);
+        mesh.add(outline);
         mesh.position.copy(position);
         mesh.scale.setScalar(size);
         mesh.renderOrder = 1;
         const entry = {
             mesh,
+            outline,
             position: position.clone(),
             key,
             size,
+            geometryType, // Save type for exports or serialization if needed later
             active: true,
             hovered: false,
             selected: false,
@@ -221,7 +269,30 @@ export function createBlockManager({ scene, state, entryManager }) {
         entry.selected = false;
         refreshEntryVisibility(entry);
 
-        return { parent: entry, children };
+        return { parent: entry, children, childSize };
+    }
+
+    function updateBlockPosition(entry, newPosition) {
+        if (!entry) return;
+
+        const wasActive = entry.active;
+        if (wasActive) {
+            entry.active = false;
+            refreshEntryVisibility(entry);
+        }
+
+        blockEntriesByKey.delete(entry.key);
+
+        entry.position.copy(newPosition);
+        entry.mesh.position.copy(newPosition);
+        entry.key = getBlockKey(entry.position, entry.size);
+
+        blockEntriesByKey.set(entry.key, entry);
+
+        if (wasActive) {
+            entry.active = true;
+            refreshEntryVisibility(entry);
+        }
     }
 
     return {
@@ -232,6 +303,8 @@ export function createBlockManager({ scene, state, entryManager }) {
         getBlockEntries,
         getBlockByMesh,
         getBlockByKey,
-        splitBlock
+        splitBlock,
+        updateBlockPosition,
+        isPositionOccupied
     };
 }

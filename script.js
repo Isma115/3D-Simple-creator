@@ -15,11 +15,16 @@ import { attachMouseBlockControls } from './src/mouse_blocks.js';
 import { attachBlockContextMenu } from './src/block_context.js';
 import { createCleanupManager } from './src/cleanup.js';
 import { createTextureManager } from './src/textures.js';
+import { exportGLTF, exportOBJ } from './src/export.js';
+import { attachSculptControls } from './src/sculpt.js';
+import { createUvEditor } from './src/uv_editor.js';
+import { createWorkspaceModeController } from './src/workspace_mode.js';
 
 const { scene, camera, renderer, controls } = initScene();
 const state = createState(scene);
 const ui = createUI();
 const textureManager = createTextureManager();
+const uvEditor = createUvEditor();
 
 
 const entryManager = createEntryManager(scene, state.planeFill);
@@ -35,14 +40,41 @@ const faceController = createFaceController({
     looseFaceMeshes: state.looseFaceMeshes,
     entryManager
 });
+let selectionManager = null;
+
+const getCurrentTextureScope = () => ui.getTextureTargetScope();
+const getCurrentUvSession = () => {
+    return selectionManager?.getUvEditorSession?.(
+        getCurrentTextureScope(),
+        textureManager.getSelectedTexture()
+    ) ?? null;
+};
+
+const refreshTextureTools = () => {
+    if (!ui.isTextureManagerVisible()) {
+        return;
+    }
+
+    const session = getCurrentUvSession();
+    if (session) {
+        uvEditor.show(session);
+    } else {
+        uvEditor.hide();
+    }
+};
+
 const updateUI = () => {
-    const visibleVertices = state.controlMode === 'points'
+    const hideCursorForBlockModes = state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse';
+    const showAllPoints = state.controlMode === 'points' || state.workMode === 'blueprint';
+    const visibleVertices = showAllPoints
         ? new Set(state.vertexPositions.keys())
         : computeVisibleVertices(state);
+    state.cursorMesh.visible = !hideCursorForBlockModes;
     entryManager.applyLooseFaceVisibility(state.looseFaceVertices);
-    entryManager.applyVisibleVertices(visibleVertices, state.controlMode === 'points');
-    ui.setClearPointSelectionEnabled(state.controlMode === 'lines' && state.selectedPointKeys.length > 0);
+    entryManager.applyVisibleVertices(visibleVertices, showAllPoints);
+    ui.setClearPointSelectionEnabled((state.controlMode === 'lines' || state.workMode === 'blueprint') && state.selectedPointKeys.length > 0);
     ui.update({ position: state.currentPosition, stats: computeStats(state, entryManager, visibleVertices) });
+    refreshTextureTools();
 };
 
 const undoManager = createUndoManager({
@@ -79,7 +111,7 @@ attachKeyboardControls({
     onUpdate: updateUI
 });
 
-const selectionManager = attachSelection({
+selectionManager = attachSelection({
     camera,
     renderer,
     entryManager,
@@ -103,9 +135,36 @@ attachMouseBlockControls({
     onUpdate: updateUI
 });
 
-attachBlockContextMenu({
+const sculptControls = attachSculptControls({
+    scene,
     camera,
     renderer,
+    controls,
+    state,
+    blockManager,
+    undoManager,
+    onUpdate: updateUI
+});
+
+const workspaceModeController = createWorkspaceModeController({
+    scene,
+    camera,
+    renderer,
+    controls,
+    state,
+    entryManager,
+    faceController,
+    graphManager,
+    blockManager,
+    undoManager,
+    onUpdate: updateUI
+});
+
+attachBlockContextMenu({
+    scene,
+    camera,
+    renderer,
+    controls,
     state,
     blockManager,
     undoManager,
@@ -116,19 +175,81 @@ ui.onControlModeChange((mode) => {
     state.controlMode = mode;
     selectionManager.clearSelection();
     state.pathPoints = [state.currentPosition.clone()];
-    ui.showTextureManager(mode === 'select-face');
+    ui.showSculptControls(mode === 'sculpt');
+    sculptControls.refreshMode();
     updateUI();
 });
 ui.setControlMode(state.controlMode);
+ui.setWorkMode(state.workMode);
+ui.showSculptControls(state.controlMode === 'sculpt');
+ui.setTextureTargetScope('selection');
+
+ui.onWorkModeToggle((mode) => {
+    selectionManager.clearSelection();
+    workspaceModeController.setMode(mode);
+    ui.setWorkMode(mode);
+    updateUI();
+});
+
+ui.onGeometryChange((type) => {
+    state.currentGeometryType = type;
+});
+
+ui.onSculptModeChange((mode) => {
+    state.sculptMode = mode;
+});
+ui.setSculptMode(state.sculptMode);
+
+ui.onSculptRadiusChange((radius) => {
+    state.sculptRadius = radius;
+});
+ui.setSculptRadius(state.sculptRadius);
 
 textureManager.onApply((texture) => {
-    selectionManager.applyTextureToSelected(texture);
+    selectionManager.applyTexture(getCurrentTextureScope(), texture);
+    refreshTextureTools();
+});
+textureManager.onSelectionChange(() => {
+    refreshTextureTools();
+});
+
+ui.onOpenUvEditor(() => {
+    const nextVisible = !ui.isTextureManagerVisible();
+    ui.showTextureManager(nextVisible);
+    if (!nextVisible) {
+        uvEditor.hide();
+        return;
+    }
+    const session = getCurrentUvSession();
+    if (session) {
+        uvEditor.show(session);
+    } else {
+        uvEditor.hide();
+    }
+    refreshTextureTools();
+});
+
+ui.onTextureTargetScopeChange(() => {
+    if (!ui.isTextureManagerVisible()) return;
+    refreshTextureTools();
+});
+
+ui.onExportGLTF(() => {
+    exportGLTF(state, blockManager);
+});
+
+ui.onExportOBJ(() => {
+    exportOBJ(state, blockManager);
 });
 
 function animate() {
     requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
+    if (state.workMode === 'classic') {
+        controls.update();
+    }
+    if (!workspaceModeController.render()) {
+        renderer.render(scene, camera);
+    }
 }
 
 updateUI();

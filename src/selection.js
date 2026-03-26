@@ -3,6 +3,374 @@ import { getBestAxis, getVertexKey, getEdgePlaneCandidates, getPlaneKey, pointsE
 import { FACE_EPSILON, STEP_SIZE } from './constants.js';
 import { drawLineBetweenPoints } from './input.js';
 
+const FACE_HOVER_EMISSIVE = 0x333333;
+const FACE_SELECTED_EMISSIVE = 0x555500;
+
+function getSelectedFaces(state) {
+    if (!state.selectedFace) return [];
+    return Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
+}
+
+function getBlockMaterialIndex(face) {
+    if (typeof face?.faceIndex !== 'number') return 0;
+    return Math.floor(face.faceIndex / 2);
+}
+
+function getFaceMaterial(face) {
+    if (!face?.mesh?.material) return null;
+    if (Array.isArray(face.mesh.material)) {
+        if (face.applyToWholeMesh) {
+            return face.mesh.material[0] ?? null;
+        }
+        return face.mesh.material[getBlockMaterialIndex(face)] ?? null;
+    }
+    return face.mesh.material;
+}
+
+function setFaceEmissive(face, color) {
+    const material = getFaceMaterial(face);
+    if (material?.emissive) {
+        material.emissive.setHex(color);
+    }
+}
+
+function clearMeshEmissive(mesh) {
+    if (!mesh?.material) return;
+    if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((material) => {
+            if (material?.emissive) {
+                material.emissive.setHex(0x000000);
+            }
+        });
+        return;
+    }
+    if (mesh.material.emissive) {
+        mesh.material.emissive.setHex(0x000000);
+    }
+}
+
+function cloneTextureForFace(texture) {
+    const clonedTexture = texture.clone();
+    clonedTexture.wrapS = THREE.RepeatWrapping;
+    clonedTexture.wrapT = THREE.RepeatWrapping;
+    clonedTexture.colorSpace = texture.colorSpace ?? THREE.SRGBColorSpace;
+    clonedTexture.needsUpdate = true;
+    return clonedTexture;
+}
+
+function ensureUniqueGeometry(mesh) {
+    if (mesh.userData.uniqueUvGeometry) return;
+    mesh.geometry = mesh.geometry.clone();
+    mesh.userData.uniqueUvGeometry = true;
+}
+
+function ensureEditableBlockMaterials(mesh) {
+    if (!Array.isArray(mesh.material)) {
+        const baseMaterial = mesh.material;
+        const materialCount = Math.max(
+            mesh.geometry?.groups?.reduce((max, group) => Math.max(max, group.materialIndex), -1) + 1,
+            1
+        );
+        mesh.material = Array.from({ length: materialCount }, () => baseMaterial.clone());
+        mesh.userData.blockFaceMaterialsUnique = true;
+        return;
+    }
+
+    if (!mesh.userData.blockFaceMaterialsUnique) {
+        mesh.material = mesh.material.map((material) => material.clone());
+        mesh.userData.blockFaceMaterialsUnique = true;
+    }
+}
+
+function ensureUvAttribute(geometry) {
+    let uvAttribute = geometry.getAttribute('uv');
+    if (uvAttribute) return uvAttribute;
+
+    const positionAttribute = geometry.getAttribute('position');
+    uvAttribute = new THREE.Float32BufferAttribute(positionAttribute.count * 2, 2);
+    geometry.setAttribute('uv', uvAttribute);
+    return uvAttribute;
+}
+
+function getAllTriangles(mesh) {
+    const geometry = mesh.geometry;
+    const index = geometry.index;
+    const triangles = [];
+
+    if (index) {
+        for (let i = 0; i < index.count; i += 3) {
+            triangles.push([
+                index.getX(i),
+                index.getX(i + 1),
+                index.getX(i + 2)
+            ]);
+        }
+        return triangles;
+    }
+
+    const positionCount = geometry.getAttribute('position').count;
+    for (let i = 0; i < positionCount; i += 3) {
+        triangles.push([i, i + 1, i + 2]);
+    }
+    return triangles;
+}
+
+function getBlockFaceTriangles(mesh, faceIndex) {
+    const index = mesh.geometry.index;
+    if (!index) {
+        return getAllTriangles(mesh).slice(0, 2);
+    }
+
+    const start = getBlockMaterialIndex({ faceIndex }) * 6;
+    if (start + 5 >= index.count) {
+        return getAllTriangles(mesh).slice(0, 2);
+    }
+
+    return [
+        [index.getX(start), index.getX(start + 1), index.getX(start + 2)],
+        [index.getX(start + 3), index.getX(start + 4), index.getX(start + 5)]
+    ];
+}
+
+function collectUvTargets(selectedFaces) {
+    return selectedFaces.map((face) => {
+        const mesh = face.mesh;
+        if (face.data?.type === 'block') {
+            ensureUniqueGeometry(mesh);
+            ensureEditableBlockMaterials(mesh);
+        }
+
+        const geometry = mesh.geometry;
+        const uvAttribute = ensureUvAttribute(geometry);
+        const triangles = face.data?.type === 'block' && !face.applyToWholeMesh
+            ? getBlockFaceTriangles(mesh, face.faceIndex)
+            : getAllTriangles(mesh);
+        const refs = new Map();
+
+        for (const triangle of triangles) {
+            for (const uvIndex of triangle) {
+                if (refs.has(uvIndex)) continue;
+                const worldPosition = new THREE.Vector3()
+                    .fromBufferAttribute(geometry.getAttribute('position'), uvIndex)
+                    .applyMatrix4(mesh.matrixWorld);
+                refs.set(uvIndex, {
+                    id: `${mesh.uuid}:${uvIndex}`,
+                    uvIndex,
+                    worldPosition
+                });
+            }
+        }
+
+        return {
+            face,
+            mesh,
+            geometry,
+            uvAttribute,
+            triangles,
+            refs: Array.from(refs.values())
+        };
+    });
+}
+
+function buildUvEditorPayload(targets) {
+    const points = [];
+    const triangles = [];
+    const seen = new Set();
+
+    for (const target of targets) {
+        for (const ref of target.refs) {
+            if (seen.has(ref.id)) continue;
+            points.push({
+                id: ref.id,
+                x: target.uvAttribute.getX(ref.uvIndex),
+                y: target.uvAttribute.getY(ref.uvIndex)
+            });
+            seen.add(ref.id);
+        }
+
+        for (const triangle of target.triangles) {
+            triangles.push(triangle.map((uvIndex) => `${target.mesh.uuid}:${uvIndex}`));
+        }
+    }
+
+    return { points, triangles };
+}
+
+function findProjectionBasis(targets) {
+    for (const target of targets) {
+        for (const triangle of target.triangles) {
+            const [aIndex, bIndex, cIndex] = triangle;
+            const a = new THREE.Vector3()
+                .fromBufferAttribute(target.geometry.getAttribute('position'), aIndex)
+                .applyMatrix4(target.mesh.matrixWorld);
+            const b = new THREE.Vector3()
+                .fromBufferAttribute(target.geometry.getAttribute('position'), bIndex)
+                .applyMatrix4(target.mesh.matrixWorld);
+            const c = new THREE.Vector3()
+                .fromBufferAttribute(target.geometry.getAttribute('position'), cIndex)
+                .applyMatrix4(target.mesh.matrixWorld);
+            const edgeA = b.clone().sub(a);
+            const edgeB = c.clone().sub(a);
+            const normal = new THREE.Vector3().crossVectors(edgeA, edgeB);
+
+            if (normal.lengthSq() < 1e-8 || edgeA.lengthSq() < 1e-8) {
+                continue;
+            }
+
+            const tangent = edgeA.normalize();
+            const bitangent = new THREE.Vector3().crossVectors(normal.normalize(), tangent).normalize();
+            if (bitangent.lengthSq() < 1e-8) {
+                continue;
+            }
+
+            return { tangent, bitangent };
+        }
+    }
+
+    return {
+        tangent: new THREE.Vector3(1, 0, 0),
+        bitangent: new THREE.Vector3(0, 1, 0)
+    };
+}
+
+function buildFittedUvMap(targets) {
+    const uniqueRefs = new Map();
+    for (const target of targets) {
+        for (const ref of target.refs) {
+            uniqueRefs.set(ref.id, ref);
+        }
+    }
+
+    const { tangent, bitangent } = findProjectionBasis(targets);
+    let minU = Infinity;
+    let minV = Infinity;
+    let maxU = -Infinity;
+    let maxV = -Infinity;
+    const projected = [];
+
+    for (const ref of uniqueRefs.values()) {
+        const u = ref.worldPosition.dot(tangent);
+        const v = ref.worldPosition.dot(bitangent);
+        projected.push({ id: ref.id, u, v });
+        minU = Math.min(minU, u);
+        minV = Math.min(minV, v);
+        maxU = Math.max(maxU, u);
+        maxV = Math.max(maxV, v);
+    }
+
+    const width = Math.max(maxU - minU, 1e-6);
+    const height = Math.max(maxV - minV, 1e-6);
+    const pointMap = new Map();
+
+    for (const point of projected) {
+        pointMap.set(point.id, new THREE.Vector2(
+            (point.u - minU) / width,
+            (point.v - minV) / height
+        ));
+    }
+
+    return pointMap;
+}
+
+function applyUvPointMap(targets, pointMap) {
+    for (const target of targets) {
+        for (const ref of target.refs) {
+            const uv = pointMap.get(ref.id);
+            if (!uv) continue;
+            target.uvAttribute.setXY(ref.uvIndex, uv.x, uv.y);
+        }
+        target.uvAttribute.needsUpdate = true;
+    }
+
+    return buildUvEditorPayload(targets);
+}
+
+function assignTextureToFaces(selectedFaces, texture) {
+    if (!texture || selectedFaces.length === 0) return false;
+
+    const targets = collectUvTargets(selectedFaces);
+    const fittedMap = buildFittedUvMap(targets);
+
+    selectedFaces.forEach((face) => {
+        if (face.data?.type === 'block') {
+            ensureEditableBlockMaterials(face.mesh);
+            if (face.applyToWholeMesh) {
+                face.mesh.material = face.mesh.material.map((material) => {
+                    const nextMaterial = material.clone();
+                    nextMaterial.map = cloneTextureForFace(texture);
+                    nextMaterial.needsUpdate = true;
+                    return nextMaterial;
+                });
+                return;
+            }
+
+            const materialIndex = getBlockMaterialIndex(face);
+            const currentMaterial = face.mesh.material[materialIndex];
+            const nextMaterial = currentMaterial.clone();
+            nextMaterial.map = cloneTextureForFace(texture);
+            nextMaterial.needsUpdate = true;
+            face.mesh.material[materialIndex] = nextMaterial;
+            return;
+        }
+
+        const nextMaterial = face.mesh.material.clone();
+        nextMaterial.map = cloneTextureForFace(texture);
+        nextMaterial.needsUpdate = true;
+        face.mesh.material = nextMaterial;
+    });
+
+    applyUvPointMap(targets, fittedMap);
+    selectedFaces.forEach((face) => {
+        if (!face.applyToWholeMesh) {
+            setFaceEmissive(face, FACE_SELECTED_EMISSIVE);
+        }
+    });
+    return true;
+}
+
+function getSelectionTexture(selectedFaces) {
+    for (const face of selectedFaces) {
+        const texture = getFaceMaterial(face)?.map;
+        if (texture) return texture;
+    }
+    return null;
+}
+
+function createUvEditorSession(selectedFaces, fallbackTexture) {
+    if (selectedFaces.length === 0) return null;
+
+    const selectionHasTexture = selectedFaces.every((face) => Boolean(getFaceMaterial(face)?.map));
+    const sourceTexture = getSelectionTexture(selectedFaces) ?? fallbackTexture;
+    if (!selectionHasTexture) {
+        if (!sourceTexture) return null;
+        assignTextureToFaces(selectedFaces, sourceTexture);
+    }
+
+    const targets = collectUvTargets(selectedFaces);
+    const resetMap = buildFittedUvMap(targets);
+    const payload = buildUvEditorPayload(targets);
+
+    return {
+        texture: getSelectionTexture(selectedFaces),
+        points: payload.points,
+        triangles: payload.triangles,
+        update(nextPoints) {
+            const pointMap = new Map(
+                nextPoints.map((point) => [point.id, new THREE.Vector2(point.x, point.y)])
+            );
+            const nextPayload = applyUvPointMap(targets, pointMap);
+            this.points = nextPayload.points;
+            this.triangles = nextPayload.triangles;
+        },
+        reset() {
+            const nextPayload = applyUvPointMap(targets, resetMap);
+            this.points = nextPayload.points;
+            this.triangles = nextPayload.triangles;
+            return nextPayload;
+        }
+    };
+}
+
 export function attachSelection({ camera, renderer, entryManager, blockManager, state, onUpdate, scene, graphManager, faceController, undoManager }) {
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -21,7 +389,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     );
     previewLine.material.transparent = true;
     previewLine.material.opacity = 0.7;
-    previewLine.renderOrder = 1;
+    previewLine.renderOrder = 10;
     previewLine.visible = false;
     scene.add(previewLine);
     const previewStartMesh = new THREE.Mesh(state.pointGeometry, state.pointMaterial.clone());
@@ -381,16 +749,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             const facesToRevert = Array.isArray(state.hoveredFace) ? state.hoveredFace : [state.hoveredFace];
             facesToRevert.forEach(face => {
                 if (!face) return;
-                // If a face is selected, do not revert its hover state if it's the exact same face. 
-                // However, joint selection makes this tricky, so we rely on exact mesh material array modification properly.
-                // We'll revert all hover emissions back to 0. (Selected emission is handled separately below).
-                if (face.mesh.material.emissive) {
-                     face.mesh.material.emissive.setHex(0x000000);
-                } else if (Array.isArray(face.mesh.material)) {
-                     face.mesh.material.forEach(m => {
-                         if (m.emissive) m.emissive.setHex(0x000000);
-                     });
-                }
+                clearMeshEmissive(face.mesh);
             });
             state.hoveredFace = null;
         }
@@ -406,23 +765,14 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
         // Apply new hover
         facesToHover.forEach(face => {
-            // Check if this specific face is part of the selection. If so, skip hover highlighting to keep selection highlight.
             let isSelected = false;
             if (state.selectedFace) {
                 const selFaces = Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
-                isSelected = selFaces.some(sf => sf.mesh === face.mesh); // Oversimplification, but good enough for visual
+                isSelected = selFaces.some(sf => sf.mesh === face.mesh && sf.faceIndex === face.faceIndex);
             }
             
             if (!isSelected) {
-                if (face.mesh.material.emissive) {
-                    face.mesh.material.emissive.setHex(0x333333); // Highlight color
-                } else if (Array.isArray(face.mesh.material)) {
-                    // Highlight the specific material face if it's an array
-                    const materialIndex = Math.floor(face.faceIndex / 2);
-                    if (face.mesh.material[materialIndex].emissive) {
-                        face.mesh.material[materialIndex].emissive.setHex(0x333333);
-                    }
-                }
+                setFaceEmissive(face, FACE_HOVER_EMISSIVE);
             }
         });
         
@@ -430,14 +780,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (state.selectedFace) {
             const selFaces = Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
             selFaces.forEach(face => {
-                 if (face.mesh.material.emissive) {
-                     face.mesh.material.emissive.setHex(0x555500); 
-                 } else if (Array.isArray(face.mesh.material)) {
-                    const materialIndex = Math.floor(face.faceIndex / 2);
-                    if (face.mesh.material[materialIndex].emissive) {
-                        face.mesh.material[materialIndex].emissive.setHex(0x555500);
-                    }
-                 }
+                 setFaceEmissive(face, FACE_SELECTED_EMISSIVE);
             });
         }
     }
@@ -448,18 +791,15 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (state.selectedFace) {
              const facesToRevert = Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
              facesToRevert.forEach(face => {
-                 if (face.mesh.material.emissive) {
-                     face.mesh.material.emissive.setHex(0x000000);
-                 } else if (Array.isArray(face.mesh.material)) {
-                     face.mesh.material.forEach(m => {
-                         if (m.emissive) m.emissive.setHex(0x000000);
-                     });
-                 }
+                 clearMeshEmissive(face.mesh);
              });
              state.selectedFace = null;
         }
 
-        if (!nextFace) return;
+        if (!nextFace) {
+            onUpdate();
+            return;
+        }
         
         let facesToSelect = [nextFace];
         if (isJoint && nextFace.data && nextFace.data.type === 'block') {
@@ -469,16 +809,55 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         state.selectedFace = facesToSelect;
 
         facesToSelect.forEach(face => {
-             if (face.mesh.material.emissive) {
-                 face.mesh.material.emissive.setHex(0x555500); // Selected color (yellowish)
-             } else if (Array.isArray(face.mesh.material)) {
-                // Highlight the specific material face if it's an array
-                const materialIndex = Math.floor(face.faceIndex / 2);
-                if (face.mesh.material[materialIndex].emissive) {
-                    face.mesh.material[materialIndex].emissive.setHex(0x555500);
-                }
-             }
+             setFaceEmissive(face, FACE_SELECTED_EMISSIVE);
         });
+        onUpdate();
+    }
+
+    function getUvTargets(scope = 'selection') {
+        if (scope === 'model') {
+            const targets = [];
+            const seenMeshes = new Set();
+
+            for (const planeData of state.planeFill.values()) {
+                if (!planeData?.mesh || seenMeshes.has(planeData.mesh.uuid)) continue;
+                seenMeshes.add(planeData.mesh.uuid);
+                targets.push({
+                    mesh: planeData.mesh,
+                    data: { type: 'plane', data: planeData },
+                    applyToWholeMesh: true
+                });
+            }
+
+            for (const [key, mesh] of state.looseFaceMeshes.entries()) {
+                if (!mesh || seenMeshes.has(mesh.uuid)) continue;
+                seenMeshes.add(mesh.uuid);
+                targets.push({
+                    mesh,
+                    data: { type: 'loose', key },
+                    applyToWholeMesh: true
+                });
+            }
+
+            if (blockManager) {
+                for (const entry of blockManager.getBlockEntries()) {
+                    if (!entry.active || !entry.mesh || seenMeshes.has(entry.mesh.uuid)) continue;
+                    seenMeshes.add(entry.mesh.uuid);
+                    targets.push({
+                        mesh: entry.mesh,
+                        data: { type: 'block', entry },
+                        applyToWholeMesh: true
+                    });
+                }
+            }
+
+            return targets;
+        }
+
+        return getSelectedFaces(state).map((face) => ({
+            ...face,
+            applyToWholeMesh: false
+        }));
     }
 
 
@@ -556,8 +935,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             }
         }
 
-        hideJoinMenu();
-        handleLinePreview(getPointPositionByKey(state.selectedPointKeys[state.selectedPointKeys.length - 1]));
+        clearPointSelection({ clearActive: true, notify: true });
         return createdAny;
     }
 
@@ -580,6 +958,10 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
     function handleBlockSelect(entry) {
         if (!blockManager) return;
+        if (!entry) {
+            onUpdate();
+            return;
+        }
         if (state.selectedBlock && state.selectedBlock !== entry) {
             blockManager.setSelected(state.selectedBlock, false);
         }
@@ -800,6 +1182,15 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function onMouseMove(event) {
+        if (state.workMode !== 'classic') {
+            handleHover(null);
+            handleBlockHover(null);
+            handleGridHover(null);
+            handleFaceHover(null);
+            hideJoinMenu();
+            hideLinePreview();
+            return;
+        }
         updateMouse(event);
         if (dragState) {
             event.preventDefault();
@@ -822,6 +1213,16 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (state.controlMode === 'points') {
             const entry = pickEntry(true);
             handleHover(entry);
+            handleBlockHover(null);
+            handleGridHover(null);
+            handleFaceHover(null);
+            hideJoinMenu();
+            hideLinePreview();
+            return;
+        }
+
+        if (state.controlMode === 'sculpt') {
+            handleHover(null);
             handleBlockHover(null);
             handleGridHover(null);
             handleFaceHover(null);
@@ -856,6 +1257,11 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function onClick(event) {
+        if (state.workMode !== 'classic') {
+            hideJoinMenu();
+            hideLinePreview();
+            return;
+        }
         updateMouse(event);
         if (suppressClick) {
             suppressClick = false;
@@ -896,6 +1302,15 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleGridHover(null);
             return;
         }
+        if (state.controlMode === 'sculpt') {
+            hideJoinMenu();
+            hideLinePreview();
+            handleHover(null);
+            handleBlockHover(null);
+            handleGridHover(null);
+            handleFaceHover(null);
+            return;
+        }
         const entry = pickEntry(true);
         if (event.shiftKey) {
             if (!entry) {
@@ -923,6 +1338,10 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function onContextMenu(event) {
+        if (state.workMode !== 'classic') {
+            hideJoinMenu();
+            return;
+        }
         if (state.controlMode !== 'lines') {
             hideJoinMenu();
             return;
@@ -943,6 +1362,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function onPointerDown(event) {
+        if (state.workMode !== 'classic') return;
         if (event.button !== 0) return;
         if (state.controlMode !== 'points') return;
         if (!event.shiftKey) return;
@@ -1000,175 +1420,23 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         clearPointSelection: () => {
             clearPointSelection();
         },
-        applyTextureToSelected: (texture) => {
-            if (!state.selectedFace) return;
-            
-            const selFaces = Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
-            if (selFaces.length === 0) return;
-
-            // Determine if these form a contiguous joint block face
-            const isJointBlockFace = selFaces.length > 1 && selFaces[0].data && selFaces[0].data.type === 'block';
-            
-            let minU = Infinity, minV = Infinity, maxU = -Infinity, maxV = -Infinity;
-            const uDir = new THREE.Vector3(0, 0, 0);
-            const vDir = new THREE.Vector3(0, 0, 0);
-            
-            if (isJointBlockFace) {
-                // Determine the normal plane and a stable UV-aligned basis
-                const normalObj = selFaces[0];
-                const geom = normalObj.mesh.geometry;
-                const positions = geom.attributes.position;
-                const uvs = geom.attributes.uv;
-                const index = geom.index;
-
-                const i0 = index.getX(normalObj.faceIndex * 3);
-                const i1 = index.getX(normalObj.faceIndex * 3 + 1);
-                const i2 = index.getX(normalObj.faceIndex * 3 + 2);
-
-                const a = new THREE.Vector3().fromBufferAttribute(positions, i0);
-                const b = new THREE.Vector3().fromBufferAttribute(positions, i1);
-                const c = new THREE.Vector3().fromBufferAttribute(positions, i2);
-
-                const cb = new THREE.Vector3().subVectors(c, b);
-                const ab = new THREE.Vector3().subVectors(a, b);
-                const localNormal = new THREE.Vector3().crossVectors(cb, ab).normalize();
-                const normalMatrix = new THREE.Matrix3().getNormalMatrix(normalObj.mesh.matrixWorld);
-                const worldNormal = localNormal.clone().applyMatrix3(normalMatrix).normalize();
-                
-                if (uvs) {
-                    const p0 = a.clone().applyMatrix4(normalObj.mesh.matrixWorld);
-                    const p1 = b.clone().applyMatrix4(normalObj.mesh.matrixWorld);
-                    const p2 = c.clone().applyMatrix4(normalObj.mesh.matrixWorld);
-
-                    const uv0 = new THREE.Vector2().fromBufferAttribute(uvs, i0);
-                    const uv1 = new THREE.Vector2().fromBufferAttribute(uvs, i1);
-                    const uv2 = new THREE.Vector2().fromBufferAttribute(uvs, i2);
-
-                    const deltaPos1 = p1.clone().sub(p0);
-                    const deltaPos2 = p2.clone().sub(p0);
-                    const deltaUV1 = uv1.clone().sub(uv0);
-                    const deltaUV2 = uv2.clone().sub(uv0);
-                    const denom = (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x);
-
-                    if (Math.abs(denom) > 1e-6) {
-                        const r = 1 / denom;
-                        const tangent = deltaPos1.clone().multiplyScalar(deltaUV2.y)
-                            .sub(deltaPos2.clone().multiplyScalar(deltaUV1.y))
-                            .multiplyScalar(r)
-                            .normalize();
-                        const bitangent = deltaPos2.clone().multiplyScalar(deltaUV1.x)
-                            .sub(deltaPos1.clone().multiplyScalar(deltaUV2.x))
-                            .multiplyScalar(r)
-                            .normalize();
-
-                        uDir.copy(tangent);
-                        // Orthonormalize V against U and normal, preserving UV orientation
-                        vDir.copy(new THREE.Vector3().crossVectors(worldNormal, uDir).normalize());
-                        if (vDir.dot(bitangent) < 0) vDir.negate();
-                    }
-                }
-
-                if (uDir.lengthSq() < 1e-6 || vDir.lengthSq() < 1e-6) {
-                    // Fallback: axis-aligned basis by dominant normal
-                    if (Math.abs(worldNormal.x) > 0.9) {
-                        uDir.set(0, 0, 1);
-                        vDir.set(0, 1, 0);
-                    } else if (Math.abs(worldNormal.y) > 0.9) {
-                        uDir.set(1, 0, 0);
-                        vDir.set(0, 0, 1);
-                    } else {
-                        uDir.set(1, 0, 0);
-                        vDir.set(0, 1, 0);
-                    }
-                }
-
-                // Calculate bounding box in that 2D projection
-                selFaces.forEach(face => {
-                    const pos = face.mesh.getWorldPosition(new THREE.Vector3());
-                    const size = face.data.entry.size;
-                    const half = size / 2;
-                    
-                    const u = pos.dot(uDir);
-                    const v = pos.dot(vDir);
-                    const uExtent = half * (Math.abs(uDir.x) + Math.abs(uDir.y) + Math.abs(uDir.z));
-                    const vExtent = half * (Math.abs(vDir.x) + Math.abs(vDir.y) + Math.abs(vDir.z));
-                    
-                    minU = Math.min(minU, u - uExtent);
-                    maxU = Math.max(maxU, u + uExtent);
-                    minV = Math.min(minV, v - vExtent);
-                    maxV = Math.max(maxV, v + vExtent);
-                });
+        hasUvTarget: (scope = 'selection') => {
+            return getUvTargets(scope).length > 0;
+        },
+        getTargetTexture: (scope = 'selection') => {
+            return getSelectionTexture(getUvTargets(scope));
+        },
+        getUvEditorSession: (scope = 'selection', fallbackTexture = null) => {
+            return createUvEditorSession(getUvTargets(scope), fallbackTexture);
+        },
+        applyTexture: (scope = 'selection', texture) => {
+            const targets = getUvTargets(scope);
+            if (targets.length === 0) return false;
+            const applied = assignTextureToFaces(targets, texture);
+            if (applied) {
+                onUpdate();
             }
-
-            const totalWidth = isJointBlockFace ? (maxU - minU) : 1;
-            const totalHeight = isJointBlockFace ? (maxV - minV) : 1;
-            
-            selFaces.forEach(face => {
-                const targetMesh = face.mesh;
-                
-                // Clone the texture so we can modify its offset and repeat per block without affecting others
-                const blockTexture = texture.clone();
-                blockTexture.needsUpdate = true;
-                
-                if (isJointBlockFace) {
-                    const pos = face.mesh.getWorldPosition(new THREE.Vector3());
-                    const size = face.data.entry.size;
-                    const half = size / 2;
-                    const u = pos.dot(uDir);
-                    const v = pos.dot(vDir);
-                    const uExtent = half * (Math.abs(uDir.x) + Math.abs(uDir.y) + Math.abs(uDir.z));
-                    const vExtent = half * (Math.abs(vDir.x) + Math.abs(vDir.y) + Math.abs(vDir.z));
-                    const blockMinU = u - uExtent;
-                    const blockMinV = v - vExtent;
-                    
-                    // The percentage of the block's width relative to the whole wall
-                    blockTexture.repeat.set((uExtent * 2) / totalWidth, (vExtent * 2) / totalHeight);
-                    // The bottom-left normalized offset
-                    blockTexture.offset.set((blockMinU - minU) / totalWidth, (blockMinV - minV) / totalHeight);
-                }
-                
-                // To apply texture uniquely we need to clone the material 
-                // so we don't apply it to all faces sharing the same material
-                if (face.data && face.data.type === 'block') {
-                    if (!Array.isArray(targetMesh.material)) {
-                        const mat = targetMesh.material;
-                        targetMesh.material = [
-                            mat.clone(), mat.clone(), mat.clone(), 
-                            mat.clone(), mat.clone(), mat.clone()
-                        ];
-                    }
-                    
-                    const materialIndex = Math.floor(face.faceIndex / 2);
-                    const mat = targetMesh.material[materialIndex].clone();
-                    mat.map = blockTexture;
-                    mat.needsUpdate = true;
-                    targetMesh.material[materialIndex] = mat;
-                    
-                } else {
-                    // Plane or Loose face
-                    const mat = targetMesh.material.clone();
-                    mat.map = blockTexture;
-                    mat.needsUpdate = true;
-                    targetMesh.material = mat;
-                }
-            });
-            // Re-apply the selected visual highlight since we replaced the material
-            const tempSelected = state.selectedFace;
-            state.selectedFace = null;
-            handleFaceSelect(null);
-            
-            // Re-apply
-            state.selectedFace = tempSelected;
-            selFaces.forEach(face => {
-                 if (face.mesh.material.emissive) {
-                     face.mesh.material.emissive.setHex(0x555500); // Selected color (yellowish)
-                 } else if (Array.isArray(face.mesh.material)) {
-                    const materialIndex = Math.floor(face.faceIndex / 2);
-                    if (face.mesh.material[materialIndex].emissive) {
-                        face.mesh.material[materialIndex].emissive.setHex(0x555500);
-                    }
-                 }
-            });
+            return applied;
         }
     };
 }

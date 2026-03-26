@@ -1,8 +1,13 @@
 import * as THREE from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { COLORS } from './constants.js';
 
 export function createState(scene) {
-    const lineMaterial = new THREE.LineBasicMaterial({ color: COLORS.line, depthTest: false });
+    const lineMaterial = new THREE.LineBasicMaterial({
+        color: COLORS.line,
+        depthTest: false,
+        depthWrite: false
+    });
     const pointMaterial = new THREE.MeshBasicMaterial({ color: COLORS.point, depthTest: false });
     const cursorMaterial = new THREE.MeshBasicMaterial({ color: COLORS.point, depthTest: false });
     const gridLineMaterial = new THREE.LineBasicMaterial({
@@ -30,8 +35,27 @@ export function createState(scene) {
     });
 
     const pointGeometry = new THREE.SphereGeometry(0.05, 12, 12);
-    const cursorGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-    const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const cursorGeometry = new THREE.SphereGeometry(0.02, 12, 12);
+
+    function makeSculptableGeometry(geometry) {
+        const prepared = mergeVertices(geometry.clone());
+        prepared.computeVertexNormals();
+        prepared.computeBoundingSphere();
+        prepared.computeBoundingBox();
+        return prepared;
+    }
+
+    // Geometry dictionary for inventory
+    const geometries = {
+        cube: makeSculptableGeometry(new THREE.BoxGeometry(1, 1, 1, 16, 16, 16)),
+        sphere: makeSculptableGeometry(new THREE.SphereGeometry(0.5, 32, 24)),
+        cylinder: makeSculptableGeometry(new THREE.CylinderGeometry(0.5, 0.5, 1, 32, 16)),
+        pyramid: makeSculptableGeometry(new THREE.ConeGeometry(0.707, 1, 4, 12)), // 0.707 radius fits closely in 1x1x1
+        cone: makeSculptableGeometry(new THREE.ConeGeometry(0.5, 1, 32, 16))
+    };
+
+    // Default to cube for retrocompatibility
+    const blockGeometry = geometries.cube;
 
     const currentPosition = new THREE.Vector3(0, 0, 0);
 
@@ -54,6 +78,7 @@ export function createState(scene) {
         pointGeometry,
         cursorGeometry,
         blockGeometry,
+        geometries,
         currentPosition,
         cursorMesh,
         originPoint,
@@ -70,10 +95,15 @@ export function createState(scene) {
         selectedEntry: null,
         selectedPointKeys: [],
         hoveredEntry: null,
+        workMode: 'classic',
         controlMode: 'lines',
         selectedBlock: null,
         hoveredBlock: null,
+        hoveredFace: null,
         selectedFace: null,
-        hoveredFace: null
+        currentBlockSize: 1,
+        currentGeometryType: 'cube',
+        sculptMode: 'raise',
+        sculptRadius: 1.5
     };
 }

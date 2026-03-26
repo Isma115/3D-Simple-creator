@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export function createTextureManager() {
-    const texturePanel = document.getElementById('texture-manager');
+    const textureModal = document.getElementById('texture-modal');
     const uploadInput = document.getElementById('texture-upload-input');
     const uploadBtn = document.getElementById('texture-upload-btn');
     const textureListEl = document.getElementById('texture-list');
@@ -10,6 +10,7 @@ export function createTextureManager() {
     const textures = []; // Array of { id, url, threeTexture }
     let selectedTextureId = null;
     let onApplyCallback = null;
+    let onSelectionChangeCallback = null;
     
     const textureLoader = new THREE.TextureLoader();
 
@@ -31,6 +32,7 @@ export function createTextureManager() {
                 selectedTextureId = tex.id;
                 updateApplyButton();
                 renderList();
+                if (onSelectionChangeCallback) onSelectionChangeCallback(tex.threeTexture);
             });
 
             const deleteBtn = document.createElement('button');
@@ -60,6 +62,9 @@ export function createTextureManager() {
                 updateApplyButton();
             }
             renderList();
+            if (onSelectionChangeCallback) {
+                onSelectionChangeCallback(selectedTextureId ? textures.find(t => t.id === selectedTextureId)?.threeTexture ?? null : null);
+            }
         }
     }
 
@@ -97,6 +102,7 @@ export function createTextureManager() {
                 selectedTextureId = texData.id;
                 updateApplyButton();
                 renderList();
+                if (onSelectionChangeCallback) onSelectionChangeCallback(texData.threeTexture);
             });
             // Reset input so the same file could be loaded again if deleted
             uploadInput.value = '';
@@ -116,13 +122,16 @@ export function createTextureManager() {
 
     return {
         show: () => {
-            if (texturePanel) texturePanel.style.display = 'flex';
+            if (textureModal) textureModal.style.display = 'flex';
         },
         hide: () => {
-            if (texturePanel) texturePanel.style.display = 'none';
+            if (textureModal) textureModal.style.display = 'none';
         },
         onApply: (cb) => {
             onApplyCallback = cb;
+        },
+        onSelectionChange: (cb) => {
+            onSelectionChangeCallback = cb;
         },
         getSelectedTexture: () => {
             if (!selectedTextureId) return null;

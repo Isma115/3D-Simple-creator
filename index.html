@@ -44,6 +44,10 @@
     </div>
 
     <div id="ui-actions" class="actions-panel">
+      <button id="toggle-work-mode-btn" class="action-button secondary work-mode-toggle" type="button">
+        Activar modo 4 vistas
+      </button>
+
       <div class="control-panel">
         <div class="control-title">Tipo de control</div>
         <label class="radio-option">
@@ -66,36 +70,196 @@
           <input type="radio" name="control-mode" value="select-face">
           <span>Seleccionar cara</span>
         </label>
+        <label class="radio-option">
+          <input type="radio" name="control-mode" value="sculpt">
+          <span>Esculpir</span>
+        </label>
       </div>
-      <button id="cleanup-lines-button" class="action-button" type="button">
+
+      <div class="inventory-panel" id="geometry-inventory-wrapper">
+        <button id="toggle-inventory-btn" class="action-button inventory-toggle" type="button" style="width: 100%;">
+          Inventario de Figuras ▼
+        </button>
+        <div id="geometry-inventory" class="geometry-inventory" style="display: none;">
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="cube" checked>
+            <div class="geometry-icon">🧊</div>
+            <span>Cubo</span>
+          </label>
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="sphere">
+            <div class="geometry-icon">⚽</div>
+            <span>Esfera</span>
+          </label>
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="cylinder">
+            <div class="geometry-icon">🛢️</div>
+            <span>Cilindro</span>
+          </label>
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="pyramid">
+            <div class="geometry-icon">🔺</div>
+            <span>Pirámide</span>
+          </label>
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="cone">
+            <div class="geometry-icon">🍦</div>
+            <span>Cono</span>
+          </label>
+        </div>
+      </div>
+
+      <button id="cleanup-lines-button" class="action-button" type="button" style="width: 100%;">
         Eliminar lineas sin cara
       </button>
       <button id="clear-point-selection-button" class="action-button secondary" type="button" disabled>
         Deseleccionar puntos
       </button>
+      <button id="open-uv-editor-btn" class="action-button secondary" type="button">
+        Editar UV
+      </button>
 
-      <div id="texture-manager" class="texture-panel" style="display: none;">
-        <div class="control-title">Gestor de Texturas</div>
-        <div class="texture-upload-row">
-          <input type="file" id="texture-upload-input" accept="image/*" style="display: none;">
-          <button id="texture-upload-btn" class="action-button secondary" type="button">Cargar Textura</button>
-        </div>
-        <div id="texture-list" class="texture-list">
-          <!-- Texture items will be added here -->
-        </div>
-        <button id="apply-texture-btn" class="action-button primary" type="button" disabled>
-          Aplicar Textura
-        </button>
-        <label class="checkbox-option">
-          <input type="checkbox" id="joint-face-checkbox" checked>
-          <span>Seleccionar cara conjunta</span>
+      <div id="sculpt-panel" class="sculpt-panel" style="display: none;">
+        <div class="control-title">Esculpido</div>
+        <label class="radio-option">
+          <input type="radio" name="sculpt-mode" value="raise" checked>
+          <span>Sacar relieve</span>
         </label>
+        <label class="radio-option">
+          <input type="radio" name="sculpt-mode" value="sink">
+          <span>Hundir</span>
+        </label>
+        <label class="range-option" for="sculpt-radius-input">
+          <span>Radio del pincel <strong id="sculpt-radius-value">1.5</strong></span>
+          <input id="sculpt-radius-input" type="range" min="0.5" max="4" step="0.5" value="1.5">
+        </label>
+        <p class="panel-hint">Arrastra con clic izquierdo sobre la superficie para esculpir.</p>
+      </div>
+
+      <div class="export-panel" style="margin-top: 20px;">
+        <div class="control-title">Exportar Modelo</div>
+        <div style="display: flex; gap: 8px;">
+          <button id="export-gltf-btn" class="action-button primary" style="flex: 1;" type="button">GLB (con textura)</button>
+          <button id="export-obj-btn" class="action-button secondary" style="flex: 1;" type="button">OBJ (simple)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="blueprint-workspace" class="blueprint-workspace" style="display: none;">
+    <div id="blueprint-view-top" class="blueprint-panel blueprint-viewport-card">
+      <div class="blueprint-panel-head">
+        <span class="blueprint-label">Arriba</span>
+        <span id="blueprint-depth-top" class="blueprint-depth">Plano Y: 0.0</span>
+      </div>
+      <p class="blueprint-view-copy">Trabaja sobre el plano X/Z viendo el modelo desde arriba.</p>
+    </div>
+
+    <div id="blueprint-view-right" class="blueprint-panel blueprint-viewport-card">
+      <div class="blueprint-panel-head">
+        <span class="blueprint-label">Derecha</span>
+        <span id="blueprint-depth-right" class="blueprint-depth">Plano X: 0.0</span>
+      </div>
+      <p class="blueprint-view-copy">Ajusta altura y profundidad mirando el lateral derecho.</p>
+    </div>
+
+    <div id="blueprint-view-left" class="blueprint-panel blueprint-viewport-card">
+      <div class="blueprint-panel-head">
+        <span class="blueprint-label">Izquierda</span>
+        <span id="blueprint-depth-left" class="blueprint-depth">Plano X: 0.0</span>
+      </div>
+      <p class="blueprint-view-copy">Comprueba la misma silueta lateral desde el lado opuesto.</p>
+    </div>
+
+    <div id="blueprint-view-bottom" class="blueprint-panel blueprint-viewport-card">
+      <div class="blueprint-panel-head">
+        <span class="blueprint-label">Abajo</span>
+        <span id="blueprint-depth-bottom" class="blueprint-depth">Plano Y: 0.0</span>
+      </div>
+      <p class="blueprint-view-copy">Revisa cierres y conexiones viendo la base del volumen.</p>
+    </div>
+
+    <div id="blueprint-preview-panel" class="blueprint-panel blueprint-preview-panel">
+      <div class="blueprint-panel-head">
+        <span class="blueprint-label">Previsualizacion 3D</span>
+        <span id="blueprint-preview-status" class="blueprint-depth">Cursor activo en X 0.0 / Y 0.0 / Z 0.0</span>
+      </div>
+      <p class="blueprint-hint">
+        Clic sobre un punto para seleccionarlo. Clic en vacio para mover el cursor. Manten Mayus y haz clic para unir el punto o cursor activo con otro punto y formar nuevas caras.
+      </p>
+    </div>
+  </div>
+
+  <div id="texture-modal" class="modal-backdrop" style="display: none;">
+    <div id="texture-manager" class="texture-panel modal-card" role="dialog" aria-modal="true" aria-labelledby="texture-modal-title">
+      <div class="modal-header">
+        <div>
+          <div id="texture-modal-title" class="control-title">Gestor de Texturas y UV</div>
+          <p class="panel-hint">Carga una textura y recoloca la malla UV dentro del cuadrado, como en un editor UV tipo Blender.</p>
+        </div>
+        <button id="close-texture-modal-btn" class="action-button secondary small modal-close" type="button">Cerrar</button>
+      </div>
+      <div class="texture-modal-layout">
+        <div class="uv-workspace">
+          <div id="uv-editor-panel" class="uv-editor-panel">
+            <div class="uv-editor-header">
+              <div>
+                <span class="control-title">Espacio UV</span>
+                <p class="panel-hint">El cuadrado representa toda la textura. La malla naranja es la parte del modelo que estás editando.</p>
+              </div>
+              <div class="uv-editor-actions">
+                <button id="uv-editor-reset-btn" class="action-button secondary small" type="button">Reencajar</button>
+                <button id="close-uv-editor-btn" class="action-button secondary small" type="button">Limpiar vista</button>
+              </div>
+            </div>
+            <div class="uv-stage">
+              <div class="uv-axis-label uv-axis-label-top">V</div>
+              <div class="uv-axis-label uv-axis-label-left">U</div>
+              <canvas id="uv-editor-canvas" class="uv-editor-canvas" width="640" height="640"></canvas>
+              <div id="uv-editor-empty" class="uv-empty-state">
+                <strong>Editor UV listo</strong>
+                <span>Carga una textura y elige si quieres editar una parte seleccionada o toda la malla del modelo.</span>
+              </div>
+            </div>
+            <p class="panel-hint">Arrastra dentro del recuadro para mover la textura sobre la malla. Tira de una esquina para ampliar o comprimir el encaje.</p>
+          </div>
+        </div>
+        <div class="texture-sidebar">
+          <div class="texture-scope-panel">
+            <span class="control-title">Alcance</span>
+            <label class="radio-option">
+              <input type="radio" name="texture-target-scope" value="selection" checked>
+              <span>Parte seleccionada</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="texture-target-scope" value="model">
+              <span>Modelo completo</span>
+            </label>
+            <p class="panel-hint">Usa "Seleccionar cara" si quieres texturizar solo una parte concreta. Si eliges "Modelo completo", la textura y el editor UV actuarán sobre toda la malla disponible.</p>
+          </div>
+          <div class="texture-upload-row">
+            <input type="file" id="texture-upload-input" accept="image/*" style="display: none;">
+            <button id="texture-upload-btn" class="action-button secondary" type="button">Cargar Textura</button>
+          </div>
+          <div id="texture-list" class="texture-list texture-list-grid">
+            <!-- Texture items will be added here -->
+          </div>
+          <button id="apply-texture-btn" class="action-button primary" type="button" disabled>
+            Aplicar Textura
+          </button>
+          <label class="checkbox-option">
+            <input type="checkbox" id="joint-face-checkbox" checked>
+            <span>Seleccionar cara conjunta</span>
+          </label>
+          <p class="panel-hint">Consejo: si quieres imitar Blender, carga una textura, selecciona una cara o todo el modelo y después recoloca la isla UV en el cuadrado.</p>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Import maps polyfill for ES modules (required by Three.js OrbitControls sometimes) -->
   <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <script type="importmap">
     {

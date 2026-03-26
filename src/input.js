@@ -14,7 +14,7 @@ import {
 function createLine(state, start, end) {
     const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
     const line = new THREE.Line(geometry, state.lineMaterial);
-    line.renderOrder = 1;
+    line.renderOrder = 10;
     return line;
 }
 
@@ -606,6 +606,7 @@ export function attachKeyboardControls({
         }
 
         if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        if (state.workMode !== 'classic') return;
 
         event.preventDefault();
 
@@ -633,9 +634,26 @@ export function attachKeyboardControls({
 
         if (state.controlMode === 'blocks-keyboard' && blockManager) {
             const startPoint = state.currentPosition.clone();
+            const sizeBefore = state.currentBlockSize;
             const activeBlock = state.selectedBlock ?? state.hoveredBlock;
-            const stepSize = activeBlock ? activeBlock.size ?? STEP_SIZE : STEP_SIZE;
-            state.currentPosition.add(moveVector.multiplyScalar(stepSize));
+            const stepSize = activeBlock ? (activeBlock.size ?? state.currentBlockSize) : state.currentBlockSize;
+
+            // Re-align explicitly in case the split shifted the center
+            const snapToSize = (value, size) => Math.round(value / size) * size;
+
+            // Align origin for subdivided grid based on offset (sizes like 0.5, 0.25 have centers at e.g., 0.25, 0.75 whereas sizes like 1 have centers at 0, 1, etc.)
+            const alignPoint = (val, size) => {
+                const offset = size === 1 ? 0 : size / 2;
+                return snapToSize(val - offset, size) + offset;
+            };
+
+            const rawPos = state.currentPosition.clone().add(moveVector.multiplyScalar(stepSize));
+            state.currentPosition.set(
+                alignPoint(rawPos.x, stepSize),
+                alignPoint(rawPos.y, stepSize),
+                alignPoint(rawPos.z, stepSize)
+            );
+            state.currentBlockSize = stepSize;
             state.cursorMesh.position.copy(state.currentPosition);
             state.pathPoints = [state.currentPosition.clone()];
 
@@ -652,7 +670,9 @@ export function attachKeyboardControls({
                     kind: 'block-add',
                     blockEntries: [entry],
                     cursorBefore: startPoint.clone(),
-                    cursorAfter: state.currentPosition.clone()
+                    sizeBefore,
+                    cursorAfter: state.currentPosition.clone(),
+                    sizeAfter: state.currentBlockSize
                 });
             }
 

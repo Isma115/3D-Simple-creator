@@ -6,6 +6,8 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const DRAG_THRESHOLD_PX = 6;
+    let pointerState = null;
 
     function updateMouse(event) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -26,18 +28,36 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
         return hits.length > 0 ? hits[0] : null;
     }
 
+    function selectBlockEntry(entry) {
+        if (!entry) return;
+        if (state.selectedBlock && state.selectedBlock !== entry) {
+            blockManager.setSelected(state.selectedBlock, false);
+        }
+        if (state.hoveredBlock && state.hoveredBlock !== entry) {
+            blockManager.setHovered(state.hoveredBlock, false);
+            state.hoveredBlock = null;
+        }
+        state.selectedBlock = entry;
+        blockManager.setSelected(entry, true);
+    }
+
     function placeBlock(position, size = 1) {
         const cursorBefore = state.currentPosition.clone();
+        const sizeBefore = state.currentBlockSize;
         const { entry, created } = blockManager.registerBlock(position, size);
+        state.currentBlockSize = size;
         state.currentPosition.copy(entry.position);
         state.cursorMesh.position.copy(state.currentPosition);
         state.pathPoints = [state.currentPosition.clone()];
+        selectBlockEntry(entry);
         if (created) {
             undoManager.pushAction({
                 kind: 'block-add',
                 blockEntries: [entry],
                 cursorBefore,
-                cursorAfter: entry.position.clone()
+                sizeBefore,
+                cursorAfter: entry.position.clone(),
+                sizeAfter: size
             });
         }
         onUpdate();
@@ -86,36 +106,87 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
         raycaster.setFromCamera(mouse, camera);
         const groundHit = new THREE.Vector3();
         if (raycaster.ray.intersectPlane(groundPlane, groundHit)) {
+            const size = state.currentBlockSize;
             placeBlock(new THREE.Vector3(
-                Math.round(groundHit.x),
-                0,
-                Math.round(groundHit.z)
-            ));
+                snapToSize(groundHit.x, size),
+                Math.max(size / 2, snapToSize(groundHit.y, size)), // prevent sinking below ground
+                snapToSize(groundHit.z, size)
+            ), size);
         }
     }
 
-    function onMouseDown(event) {
+    function beginPointerInteraction(event) {
+        if (state.workMode !== 'classic') return;
         if (state.controlMode !== 'blocks-mouse') return;
+        if (event.button !== 0 && event.button !== 2) return;
+        pointerState = {
+            button: event.button,
+            startX: event.clientX,
+            startY: event.clientY,
+            moved: false
+        };
+    }
+
+    function updatePointerInteraction(event) {
+        if (!pointerState) return;
+        const dx = event.clientX - pointerState.startX;
+        const dy = event.clientY - pointerState.startY;
+        if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
+            pointerState.moved = true;
+        }
+    }
+
+    function finishPointerInteraction(event) {
+        if (!pointerState) return;
+        const current = pointerState;
+        pointerState = null;
+
+        if (state.workMode !== 'classic') return;
+        if (state.controlMode !== 'blocks-mouse') return;
+        if (current.moved) return;
+        if (event.button !== current.button) return;
+
         updateMouse(event);
-        if (event.button === 0) {
+        if (current.button === 0) {
             handleLeftClick();
-        } else if (event.button === 2) {
+            return;
+        }
+        if (current.button === 2) {
             handleRightClick();
         }
     }
 
+    function cancelPointerInteraction() {
+        pointerState = null;
+    }
+
+    function handlePointerLeave() {
+        if (pointerState?.moved) {
+            pointerState = null;
+        }
+    }
+
     function onContextMenu(event) {
+        if (state.workMode !== 'classic') return;
         if (state.controlMode === 'blocks-mouse') {
             event.preventDefault();
         }
     }
 
-    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    renderer.domElement.addEventListener('pointerdown', beginPointerInteraction);
+    renderer.domElement.addEventListener('pointermove', updatePointerInteraction);
+    renderer.domElement.addEventListener('pointerup', finishPointerInteraction);
+    renderer.domElement.addEventListener('pointercancel', cancelPointerInteraction);
+    renderer.domElement.addEventListener('pointerleave', handlePointerLeave);
     renderer.domElement.addEventListener('contextmenu', onContextMenu);
 
     return {
         dispose: () => {
-            renderer.domElement.removeEventListener('mousedown', onMouseDown);
+            renderer.domElement.removeEventListener('pointerdown', beginPointerInteraction);
+            renderer.domElement.removeEventListener('pointermove', updatePointerInteraction);
+            renderer.domElement.removeEventListener('pointerup', finishPointerInteraction);
+            renderer.domElement.removeEventListener('pointercancel', cancelPointerInteraction);
+            renderer.domElement.removeEventListener('pointerleave', handlePointerLeave);
             renderer.domElement.removeEventListener('contextmenu', onContextMenu);
         }
     };
