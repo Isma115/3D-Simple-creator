@@ -30,15 +30,11 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
 
     function selectBlockEntry(entry) {
         if (!entry) return;
-        if (state.selectedBlock && state.selectedBlock !== entry) {
-            blockManager.setSelected(state.selectedBlock, false);
-        }
         if (state.hoveredBlock && state.hoveredBlock !== entry) {
             blockManager.setHovered(state.hoveredBlock, false);
             state.hoveredBlock = null;
         }
-        state.selectedBlock = entry;
-        blockManager.setSelected(entry, true);
+        blockManager.setSelection([entry], entry);
     }
 
     function placeBlock(position, size = 1) {
@@ -67,10 +63,7 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
         if (!entry || !entry.active) return;
         entry.active = false;
         blockManager.refreshEntryVisibility(entry);
-        if (state.selectedBlock === entry) {
-            blockManager.setSelected(entry, false);
-            state.selectedBlock = null;
-        }
+        blockManager.removeFromSelection(entry);
         if (state.hoveredBlock === entry) {
             blockManager.setHovered(entry, false);
             state.hoveredBlock = null;

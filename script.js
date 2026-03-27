@@ -66,14 +66,19 @@ const refreshTextureTools = () => {
 
 const updateUI = () => {
     const hideCursorForBlockModes = state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse';
-    const showAllPoints = state.controlMode === 'points' || state.workMode === 'blueprint';
+    const showAllPoints = state.showVertices || state.controlMode === 'points' || state.workMode === 'blueprint';
     const visibleVertices = showAllPoints
         ? new Set(state.vertexPositions.keys())
         : computeVisibleVertices(state);
     state.cursorMesh.visible = !hideCursorForBlockModes;
     entryManager.applyLooseFaceVisibility(state.looseFaceVertices);
-    entryManager.applyVisibleVertices(visibleVertices, showAllPoints);
-    ui.setClearPointSelectionEnabled((state.controlMode === 'lines' || state.workMode === 'blueprint') && state.selectedPointKeys.length > 0);
+    entryManager.applyVisibleVertices(visibleVertices, showAllPoints, state.showVertices);
+    ui.setClearPointSelectionEnabled(
+        (state.controlMode === 'lines' || state.controlMode === 'points' || state.workMode === 'blueprint')
+        && state.selectedPointKeys.length > 0
+    );
+    ui.setMergeSelectedBlocksEnabled((blockManager?.getSelectedEntries?.().length ?? 0) > 1);
+    ui.setVertexVisibility(state.showVertices);
     ui.update({ position: state.currentPosition, stats: computeStats(state, entryManager, visibleVertices, blockManager) });
     refreshTextureTools();
 };
@@ -96,6 +101,65 @@ const cleanupManager = createCleanupManager({
 });
 
 ui.onCleanupLines(() => cleanupManager.removeLinesWithoutFace());
+
+ui.onMergeBlocks(() => {
+    if (!blockManager) return;
+
+    const result = blockManager.mergeAllEntriesIntoComposite();
+    if (!result.changed) {
+        alert('No se encontraron grupos de bloques compatibles para fusionar sin caras internas.');
+        return;
+    }
+
+    selectionManager?.clearSelection();
+    undoManager.pushAction({
+        kind: 'block-merge',
+        removedEntries: result.removedEntries,
+        createdEntries: result.createdEntries
+    });
+    updateUI();
+
+    alert(`Fusion completada: ${result.beforeCount} bloques -> ${result.afterCount} figuras sin caras internas.`);
+});
+
+ui.onMergeSelectedBlocks(() => {
+    if (!blockManager) return;
+
+    const selectedEntries = blockManager.getSelectedEntries();
+    if (selectedEntries.length < 2) {
+        alert('Selecciona al menos dos bloques en modo "Bloques (teclado)". Usa Mayus + clic para acumular seleccion.');
+        return;
+    }
+
+    const result = blockManager.mergeEntriesIntoComposite(selectedEntries);
+    if (!result.changed) {
+        const hasUnsupportedEntries = (result.rejectedEntries?.length ?? 0) > 0;
+        alert(
+            hasUnsupportedEntries
+                ? 'La fusion por seleccion solo funciona con figuras cubicas alineadas a la misma rejilla y sin texturas por cara.'
+                : 'No se pudo crear una figura compuesta con la seleccion actual.'
+        );
+        return;
+    }
+
+    selectionManager?.clearSelection();
+    if ((result.resultingEntries?.length ?? 0) > 0) {
+        const primaryEntry = result.resultingEntries[result.resultingEntries.length - 1];
+        blockManager.setSelection(result.resultingEntries, primaryEntry);
+        state.currentPosition.copy(primaryEntry.position);
+        state.cursorMesh.position.copy(state.currentPosition);
+        state.pathPoints = [state.currentPosition.clone()];
+    }
+
+    undoManager.pushAction({
+        kind: 'block-merge',
+        removedEntries: result.removedEntries,
+        createdEntries: result.createdEntries
+    });
+    updateUI();
+
+    alert(`Fusion completada: ${selectedEntries.length} figuras seleccionadas -> ${result.resultingEntries.length} figuras.`);
+});
 
 const originKey = ensureVertex(state.vertexPositions, state.originPoint.position);
 entryManager.registerPointEntry(state.originPoint, state.originPoint.position, originKey);
@@ -167,8 +231,13 @@ ui.onControlModeChange((mode) => {
     state.pathPoints = [state.currentPosition.clone()];
     updateUI();
 });
+ui.onVertexVisibilityChange((visible) => {
+    state.showVertices = visible;
+    updateUI();
+});
 ui.setControlMode(state.controlMode);
 ui.setWorkMode(state.workMode);
+ui.setVertexVisibility(state.showVertices);
 ui.setTextureTargetScope('selection');
 
 ui.onWorkModeToggle((mode) => {

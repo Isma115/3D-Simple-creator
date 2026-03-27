@@ -87,11 +87,7 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
 
     function selectEntry(entry) {
         if (!entry) return;
-        if (state.selectedBlock && state.selectedBlock !== entry) {
-            blockManager.setSelected(state.selectedBlock, false);
-        }
-        state.selectedBlock = entry;
-        blockManager.setSelected(entry, true);
+        blockManager.setSelection([entry], entry);
         state.currentPosition.copy(entry.position);
         state.cursorMesh.position.copy(state.currentPosition);
         state.pathPoints = [state.currentPosition.clone()];
@@ -113,6 +109,9 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
 
     function showMenu(x, y, entry) {
         currentEntry = entry;
+        const canSplit = blockManager.canSplitBlock(entry);
+        action.disabled = !canSplit;
+        action.textContent = canSplit ? 'Dividir' : 'No divisible';
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.style.display = 'block';

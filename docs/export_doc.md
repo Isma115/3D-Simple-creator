@@ -13,6 +13,7 @@ El módulo `export.js` se encarga de aislar la geometría creada por el usuario 
 Antes de exportar los bloques:
 - elimina los hijos `Line` / `LineSegments` para que la malla blanca de contorno no termine dentro del archivo exportado.
 - detecta cubos simples adyacentes con el mismo tamaño y material base y reconstruye su piel exterior exacta, fusionando caras coplanares visibles y eliminando las internas sin cambiar la forma real del modelo.
+- deja fuera de esa fusion automatica a los prismas rectangulares ya compactados en el editor, exportandolos tal cual con su escala real para no deformar la geometria.
 - indexa la geometria resultante para reutilizar vertices equivalentes en vez de duplicarlos por cada triangulo.
 - deja sin fusionar las figuras no cúbicas o los cubos con materiales complejos por cara para no romper texturas ni UV.
 

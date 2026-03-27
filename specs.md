@@ -77,6 +77,8 @@
 
 [COMPLETADA] Permite que teniendo seleccionada una cara del modelo 3D se pueda aplicar una textura a dicha cara, teniendo un botón de rápido acceso "Aplicar textura" teniendo la textura cargada en un contenedor que va a contener toda la lista de texturas, de forma horizontal, y un panel que va a permitir desplegar dicha lista de texturas u ocultarlas
 
+[TAREA] El modo de control línea tiene que permitir crear puntos nuevos haciendo click sobre uno de los puntos del modelo y se creará una previsualización de una línea naranja 
+
 Consulta la carpeta docs si necesitas información sobre el proyecto
 
 Documenta cada parte del proyecto en una carpeta "docs" que contenga todos los módulos de la aplicación y cada vez que hagas una tarea, actualiza dicha documentación si es necesario. La documentación para cada módulo tiene que tener una explicación sencilla en lenguaje no técnico, y después una explicación técnica de cómo funciona el módulo.

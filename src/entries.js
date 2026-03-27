@@ -5,6 +5,7 @@ export function createEntryManager(scene, planeFill) {
     const pointEntries = [];
     const pointEntriesByKey = new Map();
     const meshToPointEntry = new WeakMap();
+    let pointsEnabled = true;
 
     const POINT_HIDDEN_OPACITY = 0.0;
     const POINT_VISIBLE_OPACITY = 1.0;
@@ -29,15 +30,17 @@ export function createEntryManager(scene, planeFill) {
     function updatePointAppearance(entry) {
         const material = entry.mesh.material;
         const highlighted = entry.hovered || entry.selected || entry.multiSelected;
+        const canShow = pointsEnabled
+            && entry.active
+            && (entry.faceEligible || highlighted)
+            && (entry.showAlways || highlighted);
         if (material) {
             material.transparent = true;
-            material.opacity = entry.active && (entry.faceEligible || highlighted) && (entry.showAlways || highlighted)
-                ? POINT_VISIBLE_OPACITY
-                : POINT_HIDDEN_OPACITY;
+            material.opacity = canShow ? POINT_VISIBLE_OPACITY : POINT_HIDDEN_OPACITY;
         }
         const scale = entry.selected || entry.multiSelected ? SELECT_SCALE : entry.hovered ? HOVER_SCALE : 1;
         entry.mesh.scale.setScalar(scale);
-        entry.mesh.visible = entry.active;
+        entry.mesh.visible = entry.active && pointsEnabled;
     }
 
     function refreshEntryVisibility(entry) {
@@ -238,7 +241,8 @@ export function createEntryManager(scene, planeFill) {
         }
     }
 
-    function applyVisibleVertices(visibleSet, showPoints = true) {
+    function applyVisibleVertices(visibleSet, showPoints = true, pointsVisible = true) {
+        pointsEnabled = pointsVisible;
         for (const [vertexKey, entries] of pointEntriesByKey.entries()) {
             const eligible = showPoints ? true : visibleSet.has(vertexKey);
             let shown = false;

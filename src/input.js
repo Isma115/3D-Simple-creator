@@ -403,25 +403,28 @@ export function attachKeyboardControls({
 }) {
 
     function deleteSelectedBlock() {
-        const selectedBlock = state.selectedBlock ?? state.hoveredBlock;
-        if (!selectedBlock || !selectedBlock.active) return;
+        const selectedBlocks = blockManager?.getSelectedEntries?.() ?? [];
+        const blocksToDelete = selectedBlocks.length > 0
+            ? selectedBlocks
+            : [state.selectedBlock ?? state.hoveredBlock].filter((entry) => entry?.active);
 
-        selectedBlock.active = false;
-        if (blockManager) {
-            blockManager.refreshEntryVisibility(selectedBlock);
-            if (state.selectedBlock) {
-                blockManager.setSelected(state.selectedBlock, false);
-            }
-            if (state.hoveredBlock) {
-                blockManager.setHovered(state.hoveredBlock, false);
+        if (blocksToDelete.length === 0) return;
+
+        for (const blockEntry of blocksToDelete) {
+            blockEntry.active = false;
+            if (blockManager) {
+                blockManager.refreshEntryVisibility(blockEntry);
+                blockManager.removeFromSelection(blockEntry);
             }
         }
-        state.selectedBlock = null;
-        state.hoveredBlock = null;
+        if (state.hoveredBlock && !state.hoveredBlock.active) {
+            blockManager?.setHovered(state.hoveredBlock, false);
+            state.hoveredBlock = null;
+        }
 
         undoManager.pushAction({
             kind: 'block-delete',
-            blockEntries: [selectedBlock]
+            blockEntries: blocksToDelete
         });
 
         onUpdate();
@@ -658,11 +661,7 @@ export function attachKeyboardControls({
             state.pathPoints = [state.currentPosition.clone()];
 
             const { entry, created } = blockManager.registerBlock(state.currentPosition.clone(), stepSize);
-            if (state.selectedBlock && state.selectedBlock !== entry) {
-                blockManager.setSelected(state.selectedBlock, false);
-            }
-            state.selectedBlock = entry;
-            blockManager.setSelected(entry, true);
+            blockManager.setSelection([entry], entry);
             state.hoveredBlock = null;
 
             if (created) {

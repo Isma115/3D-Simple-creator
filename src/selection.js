@@ -673,7 +673,16 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function getPreviewOrigin() {
-        if (state.controlMode !== 'lines') return null;
+        if (state.controlMode !== 'lines' && state.controlMode !== 'points') return null;
+        if (state.controlMode === 'points') {
+            if (state.selectedPointKeys.length > 0 && state.pathPoints.length > 0) {
+                return state.pathPoints[state.pathPoints.length - 1];
+            }
+            if (state.selectedEntry?.position) {
+                return state.selectedEntry.position;
+            }
+            return null;
+        }
         const lastSelectedKey = state.selectedPointKeys[state.selectedPointKeys.length - 1];
         if (lastSelectedKey) {
             return getPointPositionByKey(lastSelectedKey);
@@ -723,7 +732,10 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             for (const entry of blockManager.getBlockEntries()) {
                 if (entry.active && entry.mesh) {
                     planeMeshes.push(entry.mesh);
-                    planeByMesh.set(entry.mesh, { type: 'block', entry });
+                    planeByMesh.set(entry.mesh, {
+                        type: entry.geometryType === 'merged-cube' ? 'merged-block' : 'block',
+                        entry
+                    });
                 }
             }
         }
@@ -1108,7 +1120,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
                     seenMeshes.add(entry.mesh.uuid);
                     targets.push({
                         mesh: entry.mesh,
-                        data: { type: 'block', entry },
+                        data: { type: entry.geometryType === 'merged-cube' ? 'merged-block' : 'block', entry },
                         applyToWholeMesh: true
                     });
                 }
@@ -1167,6 +1179,78 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         }
     }
 
+    function setPointSelectionKeys(keys) {
+        clearSelectedPointKeys();
+        const nextKeys = [];
+        const seen = new Set();
+        for (const key of keys) {
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            nextKeys.push(key);
+            entryManager.setMultiSelectedByKey(key, true);
+        }
+        state.selectedPointKeys = nextKeys;
+    }
+
+    function syncPointSelectionWithPath(pathPoints = state.pathPoints) {
+        const keys = [];
+        for (const point of pathPoints) {
+            keys.push(getVertexKey(point));
+        }
+        setPointSelectionKeys(keys);
+    }
+
+    function startPointReferencePath(entry, { notify = true } = {}) {
+        if (!entry?.position) return false;
+        handleSelect(entry, { preservePath: false, notify: false });
+        state.pathPoints = [entry.position.clone()];
+        syncPointSelectionWithPath(state.pathPoints);
+        if (notify) {
+            onUpdate();
+        }
+        return true;
+    }
+
+    function connectPointReference(entry) {
+        if (!entry?.position) return false;
+        const pathBeforeOverride = state.pathPoints.map((point) => point.clone());
+
+        if (pathBeforeOverride.length === 0 || state.selectedPointKeys.length === 0) {
+            return startPointReferencePath(entry);
+        }
+
+        const startPoint = pathBeforeOverride[pathBeforeOverride.length - 1];
+        if (!startPoint || pointsEqual(startPoint, entry.position)) {
+            return startPointReferencePath(entry);
+        }
+
+        const created = drawLineBetweenPoints({
+            state,
+            entryManager,
+            faceController,
+            graphManager,
+            blockManager,
+            undoManager,
+            onUpdate,
+            startPoint,
+            endPoint: entry.position,
+            pathBeforeOverride
+        });
+
+        handleSelect(entry, { preservePath: true, notify: false });
+
+        if (created) {
+            syncPointSelectionWithPath(state.pathPoints);
+            onUpdate();
+            return true;
+        }
+
+        state.pathPoints = [entry.position.clone()];
+        syncPointSelectionWithPath(state.pathPoints);
+        onUpdate();
+        return false;
+    }
+
     function joinSelectedPoints() {
         if (state.controlMode !== 'lines') return false;
         const selectedPositions = state.selectedPointKeys
@@ -1202,40 +1286,53 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         return createdAny;
     }
 
-    function handleSelect(entry) {
+    function handleSelect(entry, { preservePath = null, notify = true } = {}) {
         if (state.selectedEntry && state.selectedEntry !== entry) {
             entryManager.setSelected(state.selectedEntry, false);
         }
         state.selectedEntry = entry;
         if (state.selectedEntry) {
-            const preservePath = state.controlMode === 'lines' && pointsEqual(state.currentPosition, state.selectedEntry.position);
+            const shouldPreservePath = preservePath ?? (
+                state.controlMode === 'lines' && pointsEqual(state.currentPosition, state.selectedEntry.position)
+            );
             entryManager.setSelected(state.selectedEntry, true);
             state.currentPosition.copy(state.selectedEntry.position);
             state.cursorMesh.position.copy(state.currentPosition);
-            if (!preservePath) {
+            if (!shouldPreservePath) {
                 state.pathPoints = [state.currentPosition.clone()];
             }
+            if (notify) {
+                onUpdate();
+            }
+            return;
+        }
+        if (notify) {
             onUpdate();
         }
     }
 
-    function handleBlockSelect(entry) {
+    function handleBlockSelect(entry, event = null) {
         if (!blockManager) return;
         if (!entry) {
+            if (!event?.shiftKey) {
+                blockManager.clearSelection();
+            }
             onUpdate();
             return;
         }
-        if (state.selectedBlock && state.selectedBlock !== entry) {
-            blockManager.setSelected(state.selectedBlock, false);
+
+        if (event?.shiftKey) {
+            blockManager.toggleSelection(entry, { makePrimary: true });
+        } else {
+            blockManager.setSelection([entry], entry);
         }
-        state.selectedBlock = entry;
+
         if (state.selectedBlock) {
-            blockManager.setSelected(state.selectedBlock, true);
             state.currentPosition.copy(state.selectedBlock.position);
             state.cursorMesh.position.copy(state.currentPosition);
             state.pathPoints = [state.currentPosition.clone()];
-            onUpdate();
         }
+        onUpdate();
     }
 
     function handleGridHover(position) {
@@ -1487,7 +1584,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleGridHover(null);
             handleFaceHover(null);
             hideJoinMenu();
-            hideLinePreview();
+            handleLinePreview(entry ? entry.position : null);
             return;
         }
 
@@ -1538,11 +1635,21 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
         if (state.controlMode === 'points') {
             hideJoinMenu();
-            hideLinePreview();
             const entry = pickEntry(true);
-            handleSelect(entry);
+            if (event.shiftKey) {
+                if (entry) {
+                    connectPointReference(entry);
+                } else {
+                    clearPointSelection({ clearActive: true, notify: true });
+                }
+            } else if (entry) {
+                startPointReferencePath(entry);
+            } else {
+                clearPointSelection({ clearActive: true, notify: true });
+            }
             handleGridHover(null);
             handleFaceHover(null);
+            hideLinePreview();
             return;
         }
 
@@ -1550,7 +1657,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             hideJoinMenu();
             hideLinePreview();
             const blockEntry = pickBlockEntry();
-            handleBlockSelect(blockEntry);
+            handleBlockSelect(blockEntry, event);
             handleBlockHover(null);
             handleGridHover(null);
             return;
@@ -1623,11 +1730,11 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             };
         }
         if (state.controlMode !== 'points') return;
-        if (!event.shiftKey) return;
+        if (!(event.shiftKey && event.altKey)) return;
         updateMouse(event);
         const entry = pickEntry(true);
         if (!entry) return;
-        handleSelect(entry);
+        handleSelect(entry, { preservePath: true, notify: false });
         beginPointDrag(entry, event);
         event.preventDefault();
         event.stopPropagation();
@@ -1670,9 +1777,8 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             state.hoveredEntry = null;
             if (blockManager) {
                 if (hoveredBlock) blockManager.setHovered(hoveredBlock, false);
-                if (state.selectedBlock) blockManager.setSelected(state.selectedBlock, false);
+                blockManager.clearSelection();
                 hoveredBlock = null;
-                state.selectedBlock = null;
                 state.hoveredBlock = null;
             }
             hideJoinMenu();

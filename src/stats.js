@@ -44,6 +44,10 @@ function getActivePointKeys(entryManager) {
 }
 
 function getGeometrySurfaceCount(entry) {
+    if (typeof entry.surfaceCount === 'number') {
+        return entry.surfaceCount;
+    }
+
     const explicitCount = SURFACE_COUNT_BY_GEOMETRY[entry.geometryType];
     if (explicitCount) {
         return explicitCount;

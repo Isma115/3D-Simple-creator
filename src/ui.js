@@ -5,7 +5,10 @@ export function createUI() {
     const pointsValue = document.getElementById('stat-points');
     const linesValue = document.getElementById('stat-lines');
     const cleanupButton = document.getElementById('cleanup-lines-button');
+    const mergeBlocksButton = document.getElementById('merge-blocks-button');
+    const mergeSelectedBlocksButton = document.getElementById('merge-selected-blocks-button');
     const clearPointSelectionButton = document.getElementById('clear-point-selection-button');
+    const showVerticesCheckbox = document.getElementById('show-vertices-toggle');
     const toggleWorkModeButton = document.getElementById('toggle-work-mode-btn');
     const controlModeInputs = Array.from(document.querySelectorAll('input[name="control-mode"]'));
     const controlModeToast = document.getElementById('control-mode-toast');
@@ -52,6 +55,23 @@ export function createUI() {
     function onClearPointSelection(handler) {
         if (!clearPointSelectionButton) return;
         clearPointSelectionButton.addEventListener('click', handler);
+    }
+
+    function onVertexVisibilityChange(handler) {
+        if (!showVerticesCheckbox) return;
+        showVerticesCheckbox.addEventListener('change', () => {
+            handler(showVerticesCheckbox.checked);
+        });
+    }
+
+    function onMergeBlocks(handler) {
+        if (!mergeBlocksButton) return;
+        mergeBlocksButton.addEventListener('click', handler);
+    }
+
+    function onMergeSelectedBlocks(handler) {
+        if (!mergeSelectedBlocksButton) return;
+        mergeSelectedBlocksButton.addEventListener('click', handler);
     }
 
     function onControlModeChange(handler) {
@@ -163,6 +183,16 @@ export function createUI() {
         clearPointSelectionButton.disabled = !enabled;
     }
 
+    function setMergeSelectedBlocksEnabled(enabled) {
+        if (!mergeSelectedBlocksButton) return;
+        mergeSelectedBlocksButton.disabled = !enabled;
+    }
+
+    function setVertexVisibility(visible) {
+        if (!showVerticesCheckbox) return;
+        showVerticesCheckbox.checked = visible;
+    }
+
     function onExportGLTF(handler) {
         if (!exportGltfButton) return;
         exportGltfButton.addEventListener('click', handler);
@@ -236,7 +266,10 @@ export function createUI() {
     return {
         update,
         onCleanupLines,
+        onMergeBlocks,
+        onMergeSelectedBlocks,
         onClearPointSelection,
+        onVertexVisibilityChange,
         onWorkModeToggle,
         onControlModeChange,
         setWorkMode,
@@ -244,6 +277,8 @@ export function createUI() {
         showTextureManager,
         isTextureManagerVisible,
         setClearPointSelectionEnabled,
+        setMergeSelectedBlocksEnabled,
+        setVertexVisibility,
         onExportGLTF,
         onExportOBJ,
         onOpenUvEditor,

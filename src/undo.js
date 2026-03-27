@@ -45,10 +45,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
             entry.active = active;
             blockManager.refreshEntryVisibility(entry);
             if (!active) {
-                if (state.selectedBlock === entry) {
-                    blockManager.setSelected(entry, false);
-                    state.selectedBlock = null;
-                }
+                blockManager.removeFromSelection(entry);
                 if (state.hoveredBlock === entry) {
                     blockManager.setHovered(entry, false);
                     state.hoveredBlock = null;
@@ -159,6 +156,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         const isDelete = action.kind === 'delete';
         const isBlockDelete = action.kind === 'block-delete';
         const isBlockAdd = action.kind === 'block-add';
+        const isBlockMerge = action.kind === 'block-merge';
         const isBlockSplit = action.kind === 'block-split';
         const lineEntries = getLineEntries(action);
         const pointEntries = getPointEntries(action);
@@ -173,6 +171,10 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
             } else if (isBlockAdd) {
                 applyBlocks(blockEntries, false);
             }
+        }
+        if (isBlockMerge && blockManager) {
+            applyBlocks(action.createdEntries ?? [], false);
+            applyBlocks(action.removedEntries ?? [], true);
         }
         if (isBlockSplit && blockManager) {
             applyBlocks(action.childEntries ?? [], false);
@@ -216,6 +218,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         const isDelete = action.kind === 'delete';
         const isBlockDelete = action.kind === 'block-delete';
         const isBlockAdd = action.kind === 'block-add';
+        const isBlockMerge = action.kind === 'block-merge';
         const isBlockSplit = action.kind === 'block-split';
         const lineEntries = getLineEntries(action);
         const pointEntries = getPointEntries(action);
@@ -230,6 +233,10 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
             } else if (isBlockAdd) {
                 applyBlocks(blockEntries, true);
             }
+        }
+        if (isBlockMerge && blockManager) {
+            applyBlocks(action.removedEntries ?? [], false);
+            applyBlocks(action.createdEntries ?? [], true);
         }
         if (isBlockSplit && blockManager) {
             applyBlocks(action.parentEntry ? [action.parentEntry] : [], false);

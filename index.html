@@ -55,6 +55,10 @@
           <input type="radio" name="control-mode" value="select-face">
           <span>Seleccionar cara</span>
         </label>
+        <label class="checkbox-option">
+          <input id="show-vertices-toggle" type="checkbox" checked>
+          <span>Mostrar vertices</span>
+        </label>
       </div>
 
       <div class="inventory-panel" id="geometry-inventory-wrapper">
@@ -92,6 +96,12 @@
 
       <button id="cleanup-lines-button" class="action-button" type="button" style="width: 100%;">
         Eliminar lineas sin cara
+      </button>
+      <button id="merge-blocks-button" class="action-button secondary" type="button" style="width: 100%;">
+        Fusionar bloques
+      </button>
+      <button id="merge-selected-blocks-button" class="action-button secondary" type="button" style="width: 100%;" disabled>
+        Fusionar seleccion
       </button>
       <button id="clear-point-selection-button" class="action-button secondary" type="button" disabled>
         Deseleccionar puntos
