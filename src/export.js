@@ -3,78 +3,29 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { OBJExporter } from 'three/addons/exporters/OBJExporter.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const EXPORT_VERTEX_TOLERANCE = 1e-6;
-const BLOCK_EPSILON = 1e-4;
-
-function cloneMaterialForExport(material, fallback = null) {
-    if (Array.isArray(material)) {
-        return material.map((item) => cloneMaterialForExport(item));
-    }
-
-    const source = fallback ?? material;
-    if (!source) return null;
-
-    const cloned = source.clone();
-    if (cloned.emissive) {
-        cloned.emissive.setHex(0x000000);
-    }
-    return cloned;
-}
-
-function materialUsesTextureMap(material) {
-    if (Array.isArray(material)) {
-        return material.some((item) => materialUsesTextureMap(item));
-    }
-    return Boolean(material?.map);
-}
-
-function optimizeGeometryForExport(geometry, { dropUv = false } = {}) {
-    if (!geometry?.getAttribute?.('position')) {
-        return geometry?.clone?.() ?? geometry;
-    }
-
-    const cloned = geometry.clone();
-    if (dropUv && cloned.getAttribute('uv')) {
-        cloned.deleteAttribute('uv');
-    }
-    const optimized = mergeVertices(cloned, EXPORT_VERTEX_TOLERANCE);
-    if (!optimized.getAttribute('normal')) {
-        optimized.computeVertexNormals();
-    }
-    optimized.computeBoundingBox();
-    optimized.computeBoundingSphere();
-    return optimized;
-}
-
-function cloneMeshWithoutLines(mesh, { materialOverride = null } = {}) {
+function cloneMeshWithoutLines(mesh) {
     const cloned = mesh.clone();
-    const removableChildren = [];
-    cloned.traverse((child) => {
-        if (child !== cloned && (child.isLine || child.isLineSegments)) {
-            removableChildren.push(child);
-        }
-    });
+    const removableChildren = cloned.children.filter((child) => child.isLine || child.isLineSegments);
     for (const child of removableChildren) {
-        child.parent?.remove(child);
+        cloned.remove(child);
     }
-    const exportMaterial = materialOverride
-        ? cloneMaterialForExport(null, materialOverride)
-        : cloneMaterialForExport(cloned.material);
-    if (cloned.geometry) {
-        cloned.geometry = optimizeGeometryForExport(cloned.geometry, {
-            dropUv: !materialUsesTextureMap(exportMaterial)
-        });
-    }
-    cloned.material = exportMaterial;
     return cloned;
 }
 
-function formatBlockNumber(value) {
-    const normalized = Math.abs(value) < EXPORT_VERTEX_TOLERANCE ? 0 : value;
-    return normalized.toFixed(6);
+function getGroupOrigin(entries, size) {
+    const half = size / 2;
+    const origin = new THREE.Vector3(Infinity, Infinity, Infinity);
+
+    for (const entry of entries) {
+        origin.x = Math.min(origin.x, entry.position.x - half);
+        origin.y = Math.min(origin.y, entry.position.y - half);
+        origin.z = Math.min(origin.z, entry.position.z - half);
+    }
+
+    return origin;
 }
 
-function getGridIndex(value, origin, size, tolerance = BLOCK_EPSILON) {
+function getGridIndex(value, origin, size, tolerance = 1e-5) {
     const rawIndex = (value - origin) / size;
     const roundedIndex = Math.round(rawIndex);
     if (Math.abs(rawIndex - roundedIndex) > tolerance) {
@@ -83,136 +34,48 @@ function getGridIndex(value, origin, size, tolerance = BLOCK_EPSILON) {
     return roundedIndex;
 }
 
+function getCubeCell(entry, origin, size) {
+    const half = size / 2;
+    const x = getGridIndex(entry.position.x - half, origin.x, size);
+    const y = getGridIndex(entry.position.y - half, origin.y, size);
+    const z = getGridIndex(entry.position.z - half, origin.z, size);
+
+    if (x === null || y === null || z === null) {
+        return null;
+    }
+
+    return { x, y, z };
+}
+
 function getCellKey(x, y, z) {
     return `${x},${y},${z}`;
 }
 
-function parseCellKey(key) {
-    const [x, y, z] = key.split(',').map(Number);
-    return { x, y, z };
-}
-
 function getEntryDimensions(entry) {
     if (entry?.dimensions?.isVector3) {
-        return entry.dimensions.clone();
+        return entry.dimensions;
     }
     const size = entry?.size ?? 1;
     return new THREE.Vector3(size, size, size);
 }
 
-function getBlockMinCorner(entry) {
+function isSingleCellCubeEntry(entry) {
     const dimensions = getEntryDimensions(entry);
-    return entry.position.clone().sub(dimensions.multiplyScalar(0.5));
-}
-
-function positiveModulo(value, step) {
-    const result = value % step;
-    return result < 0 ? result + step : result;
-}
-
-function normalizeGridOffset(value, size) {
-    const normalized = positiveModulo(value, size);
-    if (normalized <= BLOCK_EPSILON || Math.abs(normalized - size) <= BLOCK_EPSILON) {
-        return 0;
-    }
-    return normalized;
-}
-
-function getEntryGridOffset(entry) {
     const size = entry?.size ?? 1;
-    const minCorner = getBlockMinCorner(entry);
-    return new THREE.Vector3(
-        normalizeGridOffset(minCorner.x, size),
-        normalizeGridOffset(minCorner.y, size),
-        normalizeGridOffset(minCorner.z, size)
-    );
-}
-
-function getCellSpan(length, size) {
-    const rawSpan = length / size;
-    const roundedSpan = Math.round(rawSpan);
-    if (roundedSpan <= 0 || Math.abs(rawSpan - roundedSpan) > BLOCK_EPSILON) {
-        return null;
-    }
-    return roundedSpan;
-}
-
-function getEntryCellBounds(entry, offset) {
-    const size = entry?.size ?? 1;
-    const dimensions = getEntryDimensions(entry);
-    const minCorner = getBlockMinCorner(entry);
-    const spans = {
-        x: getCellSpan(dimensions.x, size),
-        y: getCellSpan(dimensions.y, size),
-        z: getCellSpan(dimensions.z, size)
-    };
-
-    if (!spans.x || !spans.y || !spans.z) {
-        return null;
-    }
-
-    const start = {
-        x: getGridIndex(minCorner.x, offset.x, size),
-        y: getGridIndex(minCorner.y, offset.y, size),
-        z: getGridIndex(minCorner.z, offset.z, size)
-    };
-
-    if (start.x === null || start.y === null || start.z === null) {
-        return null;
-    }
-
-    return { start, spans };
-}
-
-function canMergeVoxelEntry(entry) {
     return (
-        entry?.active &&
-        !Array.isArray(entry.mesh?.material) &&
-        !entry.mesh?.material?.map &&
-        (
-            (entry.geometryType === 'merged-cube' && Array.isArray(entry.voxelLocalCells) && entry.voxelLocalCells.length > 0)
-            || (entry.geometryType === 'cube' && getEntryCellBounds(entry, getEntryGridOffset(entry)) !== null)
-        )
+        Math.abs(dimensions.x - size) <= 1e-6 &&
+        Math.abs(dimensions.y - size) <= 1e-6 &&
+        Math.abs(dimensions.z - size) <= 1e-6
     );
 }
 
-function getVoxelGroupKey(entry) {
-    const offset = getEntryGridOffset(entry);
-    return [
-        formatBlockNumber(entry.size ?? 1),
-        formatBlockNumber(offset.x),
-        formatBlockNumber(offset.y),
-        formatBlockNumber(offset.z)
-    ].join('|');
-}
-
-function appendEntryOccupiedCells(entry, offset, occupied) {
-    const bounds = getEntryCellBounds(entry, offset);
-    if (!bounds) {
-        return false;
-    }
-
-    if (entry.geometryType === 'merged-cube' && Array.isArray(entry.voxelLocalCells)) {
-        for (const localKey of entry.voxelLocalCells) {
-            const localCell = parseCellKey(localKey);
-            occupied.add(getCellKey(
-                bounds.start.x + localCell.x,
-                bounds.start.y + localCell.y,
-                bounds.start.z + localCell.z
-            ));
-        }
-        return true;
-    }
-
-    for (let y = bounds.start.y; y < bounds.start.y + bounds.spans.y; y += 1) {
-        for (let z = bounds.start.z; z < bounds.start.z + bounds.spans.z; z += 1) {
-            for (let x = bounds.start.x; x < bounds.start.x + bounds.spans.x; x += 1) {
-                occupied.add(getCellKey(x, y, z));
-            }
-        }
-    }
-
-    return true;
+function canMergeCubeEntry(entry) {
+    return (
+        entry.geometryType === 'cube' &&
+        isSingleCellCubeEntry(entry) &&
+        !Array.isArray(entry.mesh?.material) &&
+        !entry.mesh?.material?.map
+    );
 }
 
 function mergePlaneCells(cells) {
@@ -271,19 +134,24 @@ function pushQuad(positions, normals, uvs, vertices, normal) {
         const vertex = vertices[index];
         positions.push(vertex.x, vertex.y, vertex.z);
         normals.push(normal.x, normal.y, normal.z);
-        if (uvs) {
-            const uv = quadUvs[index];
-            uvs.push(uv[0], uv[1]);
-        }
+        const uv = quadUvs[index];
+        uvs.push(uv[0], uv[1]);
     }
 }
 
-function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
-    if (!occupied || occupied.size === 0) {
-        return null;
-    }
-
+function createMergedCubeMesh(entries, material) {
+    const size = entries[0]?.size ?? 1;
+    const origin = getGroupOrigin(entries, size);
+    const occupied = new Set();
     const planeFaces = new Map();
+
+    for (const entry of entries) {
+        const cell = getCubeCell(entry, origin, size);
+        if (!cell) {
+            return null;
+        }
+        occupied.add(getCellKey(cell.x, cell.y, cell.z));
+    }
 
     function hasCell(x, y, z) {
         return occupied.has(getCellKey(x, y, z));
@@ -297,8 +165,11 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
         planeFaces.get(key).push({ u, v });
     }
 
-    for (const key of occupied) {
-        const cell = parseCellKey(key);
+    for (const entry of entries) {
+        const cell = getCubeCell(entry, origin, size);
+        if (!cell) {
+            return null;
+        }
         if (!hasCell(cell.x - 1, cell.y, cell.z)) addFace('x', -1, cell.x, cell.y, cell.z);
         if (!hasCell(cell.x + 1, cell.y, cell.z)) addFace('x', 1, cell.x + 1, cell.y, cell.z);
         if (!hasCell(cell.x, cell.y - 1, cell.z)) addFace('y', -1, cell.y, cell.x, cell.z);
@@ -309,6 +180,7 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
 
     const positions = [];
     const normals = [];
+    const uvs = [];
 
     for (const [planeKey, cells] of planeFaces.entries()) {
         const [axis, directionText, planeText] = planeKey.split(':');
@@ -326,7 +198,7 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
                 pushQuad(
                     positions,
                     normals,
-                    null,
+                    uvs,
                     [
                         new THREE.Vector3(p, u0, v0),
                         new THREE.Vector3(p, u1, v0),
@@ -347,7 +219,7 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
                 pushQuad(
                     positions,
                     normals,
-                    null,
+                    uvs,
                     [
                         new THREE.Vector3(p, u0, v0),
                         new THREE.Vector3(p, u0, v1),
@@ -368,7 +240,7 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
                 pushQuad(
                     positions,
                     normals,
-                    null,
+                    uvs,
                     [
                         new THREE.Vector3(u0, p, v0),
                         new THREE.Vector3(u0, p, v1),
@@ -389,7 +261,7 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
                 pushQuad(
                     positions,
                     normals,
-                    null,
+                    uvs,
                     [
                         new THREE.Vector3(u0, p, v0),
                         new THREE.Vector3(u1, p, v0),
@@ -410,7 +282,7 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
                 pushQuad(
                     positions,
                     normals,
-                    null,
+                    uvs,
                     [
                         new THREE.Vector3(u0, v0, p),
                         new THREE.Vector3(u1, v0, p),
@@ -430,7 +302,7 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
             pushQuad(
                 positions,
                 normals,
-                null,
+                uvs,
                 [
                     new THREE.Vector3(u0, v0, p),
                     new THREE.Vector3(u0, v1, p),
@@ -445,11 +317,12 @@ function createMergedCubeMeshFromOccupied(occupied, origin, size, material) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    const optimizedGeometry = mergeVertices(geometry, EXPORT_VERTEX_TOLERANCE);
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    const optimizedGeometry = mergeVertices(geometry, 1e-6);
     optimizedGeometry.computeBoundingBox();
     optimizedGeometry.computeBoundingSphere();
 
-    return new THREE.Mesh(optimizedGeometry, cloneMaterialForExport(null, material));
+    return new THREE.Mesh(optimizedGeometry, material.clone());
 }
 
 function collectExportBlockMeshes(blockManager, state) {
@@ -460,19 +333,14 @@ function collectExportBlockMeshes(blockManager, state) {
     const activeBlocks = blockManager.getBlockEntries().filter((entry) => entry.active);
 
     for (const entry of activeBlocks) {
-        if (!canMergeVoxelEntry(entry)) {
-            const materialOverride = !Array.isArray(entry.mesh?.material) && !entry.mesh?.material?.map
-                ? state.blockMaterial
-                : null;
-            exportMeshes.push(cloneMeshWithoutLines(entry.mesh, { materialOverride }));
+        if (!canMergeCubeEntry(entry)) {
+            exportMeshes.push(cloneMeshWithoutLines(entry.mesh));
             continue;
         }
 
-        const groupKey = getVoxelGroupKey(entry);
+        const groupKey = `${entry.size}|cube`;
         if (!mergeGroups.has(groupKey)) {
             mergeGroups.set(groupKey, {
-                size: entry.size ?? 1,
-                origin: getEntryGridOffset(entry),
                 entries: [],
                 material: state.blockMaterial
             });
@@ -481,25 +349,14 @@ function collectExportBlockMeshes(blockManager, state) {
     }
 
     for (const group of mergeGroups.values()) {
-        const occupied = new Set();
-        let validGroup = true;
-
-        for (const entry of group.entries) {
-            if (appendEntryOccupiedCells(entry, group.origin, occupied)) continue;
-            validGroup = false;
-            break;
-        }
-
-        const mergedMesh = validGroup
-            ? createMergedCubeMeshFromOccupied(occupied, group.origin, group.size, group.material)
-            : null;
+        const mergedMesh = createMergedCubeMesh(group.entries, group.material);
         if (mergedMesh) {
             exportMeshes.push(mergedMesh);
             continue;
         }
 
         for (const entry of group.entries) {
-            exportMeshes.push(cloneMeshWithoutLines(entry.mesh, { materialOverride: state.blockMaterial }));
+            exportMeshes.push(cloneMeshWithoutLines(entry.mesh));
         }
     }
 
@@ -528,11 +385,6 @@ function save(blob, filename) {
 function createExportGroup(state, blockManager) {
     const exportGroup = new THREE.Group();
 
-    for (const planeData of state.planeFill.values()) {
-        if (!planeData?.mesh) continue;
-        exportGroup.add(cloneMeshWithoutLines(planeData.mesh));
-    }
-
     // Export user-created loose faces
     for (const [faceKey, mesh] of state.looseFaceMeshes.entries()) {
         const clonedFace = cloneMeshWithoutLines(mesh);
@@ -543,7 +395,6 @@ function createExportGroup(state, blockManager) {
         exportGroup.add(blockMesh);
     }
 
-    exportGroup.updateMatrixWorld(true);
     return exportGroup;
 }
 
@@ -584,19 +435,19 @@ export async function exportOBJ(state, blockManager) {
     let materialIndex = 0;
 
     exportGroup.traverse((child) => {
-        if (!child.isMesh || !child.material) return;
-
-        const meshMaterials = Array.isArray(child.material) ? child.material : [child.material];
-        for (const mat of meshMaterials) {
-            if (!mat) continue;
-            if (!mat.name || (materials.has(mat.name) && materials.get(mat.name) !== mat)) {
+        if (child.isMesh && child.material) {
+            const mat = child.material;
+            // Give material a name if it lacks one
+            if (!mat.name) {
                 mat.name = 'Material_' + (++materialIndex);
             }
             if (!materials.has(mat.name)) {
                 materials.set(mat.name, mat);
             }
-            if (mat.map && mat.map.image && !textures.has(mat.name)) {
-                textures.set(mat.name, mat.map.image);
+            if (mat.map && mat.map.image) {
+                if (!textures.has(mat.name)) {
+                    textures.set(mat.name, mat.map.image);
+                }
             }
         }
     });

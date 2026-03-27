@@ -73,10 +73,7 @@ const updateUI = () => {
     state.cursorMesh.visible = !hideCursorForBlockModes;
     entryManager.applyLooseFaceVisibility(state.looseFaceVertices);
     entryManager.applyVisibleVertices(visibleVertices, showAllPoints, state.showVertices);
-    ui.setClearPointSelectionEnabled(
-        (state.controlMode === 'lines' || state.controlMode === 'points' || state.workMode === 'blueprint')
-        && state.selectedPointKeys.length > 0
-    );
+    ui.setClearPointSelectionEnabled((state.controlMode === 'lines' || state.workMode === 'blueprint') && state.selectedPointKeys.length > 0);
     ui.setMergeSelectedBlocksEnabled((blockManager?.getSelectedEntries?.().length ?? 0) > 1);
     ui.setVertexVisibility(state.showVertices);
     ui.update({ position: state.currentPosition, stats: computeStats(state, entryManager, visibleVertices, blockManager) });
