@@ -8,7 +8,7 @@ Este modulo decide que lineas y puntos deben verse u ocultarse cuando una cara l
 - `registerLineEntry` y `registerPointEntry` para crear entradas con estado. Los puntos pueden pertenecer a origen de lineas o bloques.
 - `refreshEntryVisibility` que agrega o quita un mesh de la escena segun si esta activo o cubierto.
 - `updatePlaneVisibility` que revisa si un plano relleno cubre lineas y actualiza su visibilidad.
-- `applyVisibleVertices` decide que puntos se muestran segun el conjunto de vertices visibles, marca uno por vertice como visible permanente y evita duplicados por vertice. En modo puntos fuerza que todos los vertices sean elegibles para mostrar/seleccionar.
+- `applyVisibleVertices` decide que puntos se muestran segun el conjunto de vertices visibles, marca uno por vertice como visible permanente y evita duplicados por vertice. En modo puntos y en el modo de 4 vistas fuerza que todos los vertices sean elegibles para mostrar/seleccionar, pero ya no existe un conmutador global para verlos siempre.
 - `setHovered` y `setSelected` controlan el resaltado del punto bajo el cursor o seleccionado.
 - `getLineEntries` expone las lineas registradas para operaciones como el borrado.
 - `getPointEntriesByKey` permite acceder a puntos por vertice para activar o desactivar los que vienen de bloques.

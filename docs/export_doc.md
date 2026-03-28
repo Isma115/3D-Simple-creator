@@ -2,6 +2,7 @@
 
 ## Explicación Sencilla
 Este módulo permite guardar el modelo 3D que has creado. Coge todos los cubos y caras dibujadas, eliminando de paso los elementos visuales que te ayudan a dibujar (como las líneas guía, las redículas o el puntero de edición) y lo empaqueta en un archivo que puedes descargar a tu ordenador. 
+Antes de exportar, el programa limpia automáticamente las líneas sueltas que no pertenecen a ninguna cara para que el archivo final salga más limpio.
 Cuando hay cubos normales pegados entre si, intenta juntarlos en bloques más grandes antes de exportar para no sacar una malla inflada con piezas duplicadas por dentro.
 Soporta dos formatos:
 - formato **.glb / .gltf**: Es el formato más moderno e ideal porque guarda la forma del modelo y *también las texturas* que le hayas aplicado a las distintas caras en un solo archivo interno.
@@ -9,6 +10,8 @@ Soporta dos formatos:
 
 ## Explicación Técnica
 El módulo `export.js` se encarga de aislar la geometría creada por el usuario (ignorando los helpers y líneas internas) clonando las mallas desde las caras libres (`state.looseFaceMeshes`) y los bloques activos (`blockManager.getBlockEntries()`) para añadirlos a un `THREE.Group` temporal.
+
+La limpieza de líneas sin cara se dispara desde `script.js` justo antes de llamar a `exportGLTF(...)` o `exportOBJ(...)`, reutilizando el mismo `cleanupManager` que existe para la acción manual de edición. Así el archivo exportado no conserva segmentos auxiliares aunque el usuario no haya pulsado antes la limpieza manual.
 
 Antes de exportar los bloques:
 - elimina los hijos `Line` / `LineSegments` para que la malla blanca de contorno no termine dentro del archivo exportado.

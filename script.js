@@ -9,7 +9,7 @@ import { createUndoManager } from './src/undo.js';
 import { attachKeyboardControls } from './src/input.js';
 import { startHeartbeat } from './src/heartbeat.js';
 import { ensureVertex } from './src/geometry.js';
-import { computeStats, computeVisibleVertices } from './src/stats.js';
+import { computeVisibleVertices } from './src/stats.js';
 import { attachSelection } from './src/selection.js';
 import { attachMouseBlockControls } from './src/mouse_blocks.js';
 import { attachBlockContextMenu } from './src/block_context.js';
@@ -18,12 +18,14 @@ import { createTextureManager } from './src/textures.js';
 import { exportGLTF, exportOBJ } from './src/export.js';
 import { createUvEditor } from './src/uv_editor.js';
 import { createWorkspaceModeController } from './src/workspace_mode.js';
+import { createFpsTracker } from './src/fps.js';
 
 const { scene, camera, renderer, controls } = initScene();
 const state = createState(scene);
 const ui = createUI();
 const textureManager = createTextureManager();
 const uvEditor = createUvEditor();
+const fpsTracker = createFpsTracker();
 
 
 const entryManager = createEntryManager(scene, state.planeFill);
@@ -66,17 +68,16 @@ const refreshTextureTools = () => {
 
 const updateUI = () => {
     const hideCursorForBlockModes = state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse';
-    const showAllPoints = state.showVertices || state.controlMode === 'points' || state.workMode === 'blueprint';
+    const showAllPoints = state.controlMode === 'points' || state.workMode === 'blueprint';
     const visibleVertices = showAllPoints
         ? new Set(state.vertexPositions.keys())
         : computeVisibleVertices(state);
     state.cursorMesh.visible = !hideCursorForBlockModes;
     entryManager.applyLooseFaceVisibility(state.looseFaceVertices);
-    entryManager.applyVisibleVertices(visibleVertices, showAllPoints, state.showVertices);
+    entryManager.applyVisibleVertices(visibleVertices, showAllPoints, true);
     ui.setClearPointSelectionEnabled((state.controlMode === 'lines' || state.workMode === 'blueprint') && state.selectedPointKeys.length > 0);
     ui.setMergeSelectedBlocksEnabled((blockManager?.getSelectedEntries?.().length ?? 0) > 1);
-    ui.setVertexVisibility(state.showVertices);
-    ui.update({ position: state.currentPosition, stats: computeStats(state, entryManager, visibleVertices, blockManager) });
+    ui.update({ position: state.currentPosition });
     refreshTextureTools();
 };
 
@@ -228,14 +229,10 @@ ui.onControlModeChange((mode) => {
     state.pathPoints = [state.currentPosition.clone()];
     updateUI();
 });
-ui.onVertexVisibilityChange((visible) => {
-    state.showVertices = visible;
-    updateUI();
-});
 ui.setControlMode(state.controlMode);
 ui.setWorkMode(state.workMode);
-ui.setVertexVisibility(state.showVertices);
 ui.setTextureTargetScope('selection');
+ui.setGeometry(state.currentGeometryType);
 
 ui.onWorkModeToggle((mode) => {
     selectionManager.clearSelection();
@@ -246,6 +243,30 @@ ui.onWorkModeToggle((mode) => {
 
 ui.onGeometryChange((type) => {
     state.currentGeometryType = type;
+    ui.setGeometry(type);
+});
+
+ui.onNativeMenuAction((detail) => {
+    switch (detail.action) {
+        case 'set-geometry':
+            if (detail.value) {
+                state.currentGeometryType = detail.value;
+                ui.setGeometry(detail.value);
+            }
+            break;
+        case 'cleanup-lines':
+            cleanupManager.removeLinesWithoutFace();
+            break;
+        case 'merge-blocks':
+            document.getElementById('merge-blocks-button')?.click();
+            break;
+        case 'merge-selected-blocks':
+            document.getElementById('merge-selected-blocks-button')?.click();
+            break;
+        case 'toggle-fps':
+            ui.toggleFpsVisibility();
+            break;
+    }
 });
 
 textureManager.onApply((texture) => {
@@ -282,15 +303,21 @@ ui.onTextureTargetScopeChange(() => {
 });
 
 ui.onExportGLTF(() => {
+    cleanupManager.removeLinesWithoutFace();
     exportGLTF(state, blockManager);
 });
 
 ui.onExportOBJ(() => {
+    cleanupManager.removeLinesWithoutFace();
     exportOBJ(state, blockManager);
 });
 
-function animate() {
+function animate(timestamp = 0) {
     requestAnimationFrame(animate);
+    const fps = fpsTracker.tick(timestamp);
+    if (fps > 0) {
+        ui.setFpsValue(fps);
+    }
     if (state.workMode === 'classic') {
         controls.update();
     }

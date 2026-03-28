@@ -77,7 +77,30 @@
 
 [COMPLETADA] Permite que teniendo seleccionada una cara del modelo 3D se pueda aplicar una textura a dicha cara, teniendo un botón de rápido acceso "Aplicar textura" teniendo la textura cargada en un contenedor que va a contener toda la lista de texturas, de forma horizontal, y un panel que va a permitir desplegar dicha lista de texturas u ocultarlas
 
-[TAREA] El modo de control línea tiene que permitir crear puntos nuevos haciendo click sobre uno de los puntos del modelo y se creará una previsualización de una línea naranja 
+[COMPLETADA] El modo de control línea tiene que permitir crear puntos nuevos haciendo click sobre uno de los puntos del modelo y se creará una previsualización de una línea naranja 
+
+[COMPLETADA] Consigue que el software se ejecute como una ventana de aplicación de escritorio para no tener que depender del navegador
+
+[COMPLETADA] Quitar el contador de vértices, caras, puntos etc
+
+[COMPLETADA] Las líneas sin caras se tienen que eliminar automáticamente antes de exportar el modelo
+
+[COMPLETADA] Agrega la posibilidad de en lugar de usar las flechas del teclado se utilicen las teclas WASD
+
+[COMPLETADA] El inventario de figuras llevalo a la barra de menú superior de la aplicación "Inventario"
+
+[COMPLETADA] El botón Eliminar líneas sin cara llevalo a como opción a un menú "Edición"
+
+[COMPLETADA] El botón de fusionar bloques o fusionar selección llevalo al mismo botón Edición
+
+[TAREA] El menú de inventario y edición, deben ser menús nativos de las ventanas
+
+[TAREA] Añadir un texto que muestre los FPS (se podrá ocultar o mostrar en el menú Ver -> Mostrar FPS)
+
+[TAREA] Eliminar la funcionalidad de poder ver los vértices 
+
+[TAREA] Cambia el aspecto visual de los componentes visuales para que se parezca más a la interfaz de Blender, pero que tampoco sea exactamente igual
+
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 

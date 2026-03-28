@@ -608,7 +608,27 @@ export function attachKeyboardControls({
             return;
         }
 
-        if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        if (hasModifier) return;
+        const movementKey = {
+            ArrowUp: 'up',
+            ArrowDown: 'down',
+            ArrowLeft: 'left',
+            ArrowRight: 'right',
+            KeyW: 'up',
+            KeyS: 'down',
+            KeyA: 'left',
+            KeyD: 'right'
+        }[event.code] ?? {
+            ArrowUp: 'up',
+            ArrowDown: 'down',
+            ArrowLeft: 'left',
+            ArrowRight: 'right',
+            w: 'up',
+            s: 'down',
+            a: 'left',
+            d: 'right'
+        }[key];
+        if (!movementKey) return;
         if (state.workMode !== 'classic') return;
 
         event.preventDefault();
@@ -618,17 +638,17 @@ export function attachKeyboardControls({
 
         let moveVector;
 
-        switch (event.key) {
-            case 'ArrowUp':
+        switch (movementKey) {
+            case 'up':
                 moveVector = getBestAxis(cameraUp);
                 break;
-            case 'ArrowDown':
+            case 'down':
                 moveVector = getBestAxis(cameraUp.clone().negate());
                 break;
-            case 'ArrowRight':
+            case 'right':
                 moveVector = getBestAxis(cameraRight);
                 break;
-            case 'ArrowLeft':
+            case 'left':
                 moveVector = getBestAxis(cameraRight.clone().negate());
                 break;
         }

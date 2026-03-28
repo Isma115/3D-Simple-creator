@@ -8,6 +8,7 @@ Este archivo es el "director de orquesta". No dibuja nada por si mismo, sino que
 - Importa los modulos de escena, estado, UI, entradas, bloques, control de bloques con raton, menu contextual de bloques, caras, undo/redo, teclado, seleccion, estadisticas, limpieza de lineas y heartbeat.
 - Importa tambien el nuevo editor UV visual para la recolocacion de texturas.
 - Importa tambien el controlador del nuevo modo de trabajo con 4 vistas ortograficas y una previsualizacion 3D.
+- Importa tambien un pequeno rastreador de FPS para calcular el rendimiento medio de render.
 - Inicializa `scene`, `camera`, `renderer` y `controls` con `initScene`.
 - Crea el estado compartido con `createState` y lo distribuye a los gestores (entries, blocks, graph, faces, undo).
 - Registra el punto de origen para que pueda ocultarse cuando una cara lo cubre.
@@ -17,9 +18,13 @@ Este archivo es el "director de orquesta". No dibuja nada por si mismo, sino que
 - Conecta el boton de limpieza con `createCleanupManager` para eliminar lineas sin cara.
 - Inicia el bucle de animacion con `requestAnimationFrame`.
 - En cada actualizacion recalcula los vertices visibles, oculta el cursor naranja en los modos de bloques para no tapar la pieza seleccionada y, cuando el modo de 4 vistas esta activo, fuerza que todos los puntos se mantengan visibles para que el usuario pueda construir el volumen desde las proyecciones.
+- Ya no recalcula estadisticas visuales de caras, vertices o lineas para la UI, porque la capa superior se ha simplificado a mostrar solo coordenadas.
 - Conecta los radio buttons del tipo de control para alternar entre dibujo normal, modo puntos, bloques con teclado o bloques con raton, limpiar selecciones y mantener sincronizado el indicador flotante que aparece cuando el usuario cambia de modo con `Meta + rueda`.
+- Escucha tambien las acciones enviadas por los menus nativos de la ventana (`set-geometry`, `cleanup-lines`, `merge-blocks`, `merge-selected-blocks`, `toggle-fps`) y las redirige a la misma logica que ya usaba la interfaz web.
+- Reutiliza el mismo `cleanupManager` antes de exportar a GLB u OBJ para eliminar automaticamente lineas sueltas y asegurar que el archivo final salga limpio.
 - Conecta un boton de cambio global de modo de trabajo para entrar o salir del flujo de modelado por 4 vistas.
 - En el bucle de animacion decide si renderiza una sola vista perspectiva o si delega el render en el controlador multivista.
+- En ese mismo bucle alimenta el rastreador de FPS y actualiza el texto de rendimiento solo con un promedio suavizado para evitar parpadeos.
 - Mantiene sincronizados el gestor de texturas, el alcance UV elegido por el usuario y el editor UV mediante una funcion auxiliar que refresca las herramientas de texturizado segun el contexto.
 - Activa o desactiva el nuevo acceso rapido de texturas segun si hay una cara seleccionada y conecta su boton directo de "Aplicar textura" con la aplicacion sobre esa seleccion concreta.
 - El boton global "Editar UV" abre una ventana modal de texturas y, si ya existe un objetivo valido, abre tambien la sesion UV correspondiente sobre una parte seleccionada o sobre toda la malla.

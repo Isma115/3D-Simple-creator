@@ -10,4 +10,4 @@ Este archivo crea y guarda la "memoria" de la aplicacion: donde esta el cursor, 
 - Arrays y mapas para puntos dibujados, rutas activas, registros de caras y vertices de caras libres para estadisticas y visibilidad. Incluye un mapa de meshes de caras libres para poder borrarlas y restaurarlas, referencias al punto seleccionado y al punto bajo el cursor, el estado de cara seleccionada o resaltada para texturas (`selectedFace`, `hoveredFace`), el modo global de trabajo (`workMode`) y el tipo de control activo (`controlMode`) con su seleccion/hover de cubos y el tipo de geometria actual (`currentGeometryType`).
 - Pilas de undo/redo y estructuras para grafos de planos y rellenos.
 
-El modulo agrega el cursor a la escena y deja el punto de origen listo para ser registrado por el gestor de entradas.
+El modulo agrega el cursor a la escena y deja el punto de origen listo para ser registrado por el gestor de entradas. Ya no guarda una preferencia de "mostrar todos los vertices", porque esa opcion visual se ha retirado de la aplicacion.

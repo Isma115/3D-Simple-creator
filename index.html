@@ -8,23 +8,77 @@
   <!-- Modern Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="top-menu-bar" class="menu-bar">
+    <div class="menu-group">
+      <button id="inventory-menu-btn" class="menu-button" type="button" aria-expanded="false" aria-controls="inventory-menu">
+        Inventario
+      </button>
+      <div id="inventory-menu" class="menu-dropdown" hidden>
+        <div class="menu-section-title">Figura activa</div>
+        <div id="geometry-inventory" class="geometry-inventory menu-geometry-inventory">
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="cube" checked>
+            <div class="geometry-icon">🧊</div>
+            <span>Cubo</span>
+          </label>
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="sphere">
+            <div class="geometry-icon">⚽</div>
+            <span>Esfera</span>
+          </label>
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="cylinder">
+            <div class="geometry-icon">🛢️</div>
+            <span>Cilindro</span>
+          </label>
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="pyramid">
+            <div class="geometry-icon">🔺</div>
+            <span>Pirámide</span>
+          </label>
+          <label class="geometry-option">
+            <input type="radio" name="geometry-type" value="cone">
+            <div class="geometry-icon">🍦</div>
+            <span>Cono</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu-group">
+      <button id="edit-menu-btn" class="menu-button" type="button" aria-expanded="false" aria-controls="edit-menu">
+        Edicion
+      </button>
+      <div id="edit-menu" class="menu-dropdown menu-dropdown-compact" hidden>
+        <button id="cleanup-lines-button" class="menu-item-button" type="button">
+          Eliminar lineas sin cara
+        </button>
+        <button id="merge-blocks-button" class="menu-item-button" type="button">
+          Fusionar bloques
+        </button>
+        <button id="merge-selected-blocks-button" class="menu-item-button" type="button" disabled>
+          Fusionar seleccion
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- UI Overlay -->
   <div id="ui-stack">
     <div id="ui-overlay" class="glass-panel">
-      <div id="stats-panel" class="stats-panel">
-        <span class="stat-row"><span class="stat-label">Caras</span><span id="stat-faces" class="stat-value">0</span></span>
-        <span class="stat-row"><span class="stat-label">Vertices</span><span id="stat-vertices" class="stat-value">0</span></span>
-        <span class="stat-row"><span class="stat-label">Puntos</span><span id="stat-points" class="stat-value">0</span></span>
-        <span class="stat-row"><span class="stat-label">Lineas</span><span id="stat-lines" class="stat-value">0</span></span>
-      </div>
       <div class="status">
         <span id="coordinates-display">X: 0.0, Y: 0.0, Z: 0.0</span>
+      </div>
+      <div class="status secondary">
+        <span>Figura: <strong id="active-geometry-display">Cubo</strong></span>
+      </div>
+      <div id="fps-panel" class="status fps-panel" hidden>
+        <span id="fps-display">FPS: 0</span>
       </div>
     </div>
 
@@ -55,54 +109,7 @@
           <input type="radio" name="control-mode" value="select-face">
           <span>Seleccionar cara</span>
         </label>
-        <label class="checkbox-option">
-          <input id="show-vertices-toggle" type="checkbox" checked>
-          <span>Mostrar vertices</span>
-        </label>
       </div>
-
-      <div class="inventory-panel" id="geometry-inventory-wrapper">
-        <button id="toggle-inventory-btn" class="action-button inventory-toggle" type="button" style="width: 100%;">
-          Inventario de Figuras ▼
-        </button>
-        <div id="geometry-inventory" class="geometry-inventory" style="display: none;">
-          <label class="geometry-option">
-            <input type="radio" name="geometry-type" value="cube" checked>
-            <div class="geometry-icon">🧊</div>
-            <span>Cubo</span>
-          </label>
-          <label class="geometry-option">
-            <input type="radio" name="geometry-type" value="sphere">
-            <div class="geometry-icon">⚽</div>
-            <span>Esfera</span>
-          </label>
-          <label class="geometry-option">
-            <input type="radio" name="geometry-type" value="cylinder">
-            <div class="geometry-icon">🛢️</div>
-            <span>Cilindro</span>
-          </label>
-          <label class="geometry-option">
-            <input type="radio" name="geometry-type" value="pyramid">
-            <div class="geometry-icon">🔺</div>
-            <span>Pirámide</span>
-          </label>
-          <label class="geometry-option">
-            <input type="radio" name="geometry-type" value="cone">
-            <div class="geometry-icon">🍦</div>
-            <span>Cono</span>
-          </label>
-        </div>
-      </div>
-
-      <button id="cleanup-lines-button" class="action-button" type="button" style="width: 100%;">
-        Eliminar lineas sin cara
-      </button>
-      <button id="merge-blocks-button" class="action-button secondary" type="button" style="width: 100%;">
-        Fusionar bloques
-      </button>
-      <button id="merge-selected-blocks-button" class="action-button secondary" type="button" style="width: 100%;" disabled>
-        Fusionar seleccion
-      </button>
       <button id="clear-point-selection-button" class="action-button secondary" type="button" disabled>
         Deseleccionar puntos
       </button>

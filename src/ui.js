@@ -1,21 +1,24 @@
 export function createUI() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasNativeMenus = urlParams.get('nativeMenus') === '1';
     const coordsDisplay = document.getElementById('coordinates-display');
-    const facesValue = document.getElementById('stat-faces');
-    const verticesValue = document.getElementById('stat-vertices');
-    const pointsValue = document.getElementById('stat-points');
-    const linesValue = document.getElementById('stat-lines');
+    const geometryDisplay = document.getElementById('active-geometry-display');
+    const fpsPanel = document.getElementById('fps-panel');
+    const fpsDisplay = document.getElementById('fps-display');
     const cleanupButton = document.getElementById('cleanup-lines-button');
     const mergeBlocksButton = document.getElementById('merge-blocks-button');
     const mergeSelectedBlocksButton = document.getElementById('merge-selected-blocks-button');
     const clearPointSelectionButton = document.getElementById('clear-point-selection-button');
-    const showVerticesCheckbox = document.getElementById('show-vertices-toggle');
     const toggleWorkModeButton = document.getElementById('toggle-work-mode-btn');
     const controlModeInputs = Array.from(document.querySelectorAll('input[name="control-mode"]'));
     const controlModeToast = document.getElementById('control-mode-toast');
     const controlModeToastValue = document.getElementById('control-mode-toast-value');
     const geometryInputs = Array.from(document.querySelectorAll('input[name="geometry-type"]'));
-    const toggleInventoryBtn = document.getElementById('toggle-inventory-btn');
     const geometryInventory = document.getElementById('geometry-inventory');
+    const inventoryMenuButton = document.getElementById('inventory-menu-btn');
+    const inventoryMenu = document.getElementById('inventory-menu');
+    const editMenuButton = document.getElementById('edit-menu-btn');
+    const editMenu = document.getElementById('edit-menu');
     const exportGltfButton = document.getElementById('export-gltf-btn');
     const exportObjButton = document.getElementById('export-obj-btn');
     const openUvEditorButton = document.getElementById('open-uv-editor-btn');
@@ -24,32 +27,89 @@ export function createUI() {
     const closeTextureModalButton = document.getElementById('close-texture-modal-btn');
     let controlModeChangeHandler = null;
     let controlModeToastHideTimer = null;
+    let nativeMenuActionHandler = null;
+    let fpsVisible = false;
     const controlModeLabels = new Map(controlModeInputs.map((input) => {
         const label = input.closest('label')?.querySelector('span')?.textContent?.trim() ?? input.value;
         return [input.value, label];
     }));
+    const geometryLabels = {
+        cube: 'Cubo',
+        sphere: 'Esfera',
+        cylinder: 'Cilindro',
+        pyramid: 'Piramide',
+        cone: 'Cono'
+    };
 
-    if (toggleInventoryBtn && geometryInventory) {
-        toggleInventoryBtn.addEventListener('click', () => {
-            const isHidden = geometryInventory.style.display === 'none';
-            geometryInventory.style.display = isHidden ? 'grid' : 'none';
-            toggleInventoryBtn.innerHTML = `Inventario de Figuras ${isHidden ? '▲' : '▼'}`;
+    if (hasNativeMenus) {
+        document.body.dataset.nativeMenus = 'true';
+    }
+
+    const menus = [
+        { button: inventoryMenuButton, panel: inventoryMenu },
+        { button: editMenuButton, panel: editMenu }
+    ].filter(({ button, panel }) => button && panel);
+
+    function setMenuOpen(button, panel, open) {
+        panel.hidden = !open;
+        button.setAttribute('aria-expanded', open ? 'true' : 'false');
+        const group = button.closest('.menu-group');
+        if (group) {
+            group.dataset.open = open ? 'true' : 'false';
+        }
+    }
+
+    function closeAllMenus(exceptPanel = null) {
+        for (const menu of menus) {
+            const shouldRemainOpen = menu.panel === exceptPanel && !menu.panel.hidden;
+            setMenuOpen(menu.button, menu.panel, shouldRemainOpen);
+        }
+    }
+
+    function toggleMenu(button, panel) {
+        const willOpen = panel.hidden;
+        closeAllMenus();
+        setMenuOpen(button, panel, willOpen);
+    }
+
+    for (const { button, panel } of menus) {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleMenu(button, panel);
+        });
+
+        panel.addEventListener('click', (event) => {
+            event.stopPropagation();
         });
     }
 
-    function update({ position, stats }) {
-        coordsDisplay.textContent = `X: ${position.x.toFixed(1)}, Y: ${position.y.toFixed(1)}, Z: ${position.z.toFixed(1)}`;
-        if (stats) {
-            facesValue.textContent = stats.faces.toString();
-            verticesValue.textContent = stats.vertices.toString();
-            pointsValue.textContent = stats.points.toString();
-            linesValue.textContent = stats.lines.toString();
+    document.addEventListener('pointerdown', (event) => {
+        if (event.target.closest('.menu-group')) return;
+        closeAllMenus();
+    });
+
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeAllMenus();
         }
+    });
+
+    if (geometryInventory) {
+        geometryInventory.addEventListener('change', () => {
+            closeAllMenus();
+        });
+    }
+
+    function update({ position }) {
+        coordsDisplay.textContent = `X: ${position.x.toFixed(1)}, Y: ${position.y.toFixed(1)}, Z: ${position.z.toFixed(1)}`;
     }
 
     function onCleanupLines(handler) {
         if (!cleanupButton) return;
-        cleanupButton.addEventListener('click', handler);
+        cleanupButton.addEventListener('click', () => {
+            closeAllMenus();
+            handler();
+        });
     }
 
     function onClearPointSelection(handler) {
@@ -57,21 +117,24 @@ export function createUI() {
         clearPointSelectionButton.addEventListener('click', handler);
     }
 
-    function onVertexVisibilityChange(handler) {
-        if (!showVerticesCheckbox) return;
-        showVerticesCheckbox.addEventListener('change', () => {
-            handler(showVerticesCheckbox.checked);
-        });
+    function onNativeMenuAction(handler) {
+        nativeMenuActionHandler = handler;
     }
 
     function onMergeBlocks(handler) {
         if (!mergeBlocksButton) return;
-        mergeBlocksButton.addEventListener('click', handler);
+        mergeBlocksButton.addEventListener('click', () => {
+            closeAllMenus();
+            handler();
+        });
     }
 
     function onMergeSelectedBlocks(handler) {
         if (!mergeSelectedBlocksButton) return;
-        mergeSelectedBlocksButton.addEventListener('click', handler);
+        mergeSelectedBlocksButton.addEventListener('click', () => {
+            closeAllMenus();
+            handler();
+        });
     }
 
     function onControlModeChange(handler) {
@@ -188,9 +251,29 @@ export function createUI() {
         mergeSelectedBlocksButton.disabled = !enabled;
     }
 
-    function setVertexVisibility(visible) {
-        if (!showVerticesCheckbox) return;
-        showVerticesCheckbox.checked = visible;
+    function setGeometry(value) {
+        if (geometryDisplay) {
+            geometryDisplay.textContent = geometryLabels[value] ?? value;
+        }
+        for (const input of geometryInputs) {
+            input.checked = input.value === value;
+        }
+    }
+
+    function setFpsVisibility(visible) {
+        fpsVisible = visible;
+        if (fpsPanel) {
+            fpsPanel.hidden = !visible;
+        }
+    }
+
+    function toggleFpsVisibility() {
+        setFpsVisibility(!fpsVisible);
+    }
+
+    function setFpsValue(value) {
+        if (!fpsDisplay) return;
+        fpsDisplay.textContent = `FPS: ${Math.round(value)}`;
     }
 
     function onExportGLTF(handler) {
@@ -250,6 +333,19 @@ export function createUI() {
         });
     }
 
+    window.addEventListener('simple3d-native-menu', (event) => {
+        const detail = event.detail ?? {};
+        if (detail.action === 'set-geometry' && detail.value) {
+            setGeometry(detail.value);
+        }
+        if (detail.action === 'native-menus-ready' && hasNativeMenus) {
+            closeAllMenus();
+        }
+        if (nativeMenuActionHandler) {
+            nativeMenuActionHandler(detail);
+        }
+    });
+
     window.addEventListener('wheel', (event) => {
         if (!event.metaKey) return;
         if (isTextureManagerVisible()) return;
@@ -269,7 +365,7 @@ export function createUI() {
         onMergeBlocks,
         onMergeSelectedBlocks,
         onClearPointSelection,
-        onVertexVisibilityChange,
+        onNativeMenuAction,
         onWorkModeToggle,
         onControlModeChange,
         setWorkMode,
@@ -278,7 +374,10 @@ export function createUI() {
         isTextureManagerVisible,
         setClearPointSelectionEnabled,
         setMergeSelectedBlocksEnabled,
-        setVertexVisibility,
+        setGeometry,
+        setFpsVisibility,
+        toggleFpsVisibility,
+        setFpsValue,
         onExportGLTF,
         onExportOBJ,
         onOpenUvEditor,

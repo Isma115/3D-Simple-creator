@@ -97,7 +97,6 @@ export function createState(scene) {
         hoveredEntry: null,
         workMode: 'classic',
         controlMode: 'lines',
-        showVertices: true,
         selectedBlock: null,
         selectedBlocks: [],
         hoveredBlock: null,
