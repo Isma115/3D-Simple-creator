@@ -1,33 +1,21 @@
-# Documentacion del Entry Point (`script.js`)
+# Documentación del Entry Point (`script.js`)
 
-## Explicacion Sencilla (No Tecnica)
-Este archivo es el "director de orquesta". No dibuja nada por si mismo, sino que conecta todos los modulos: prepara la escena 3D, crea el estado inicial, conecta el teclado, decide si se trabaja en la vista clasica o en el nuevo modo de 4 vistas, y arranca el renderizado. Su objetivo es que cada parte del sistema trabaje junta sin mezclar responsabilidades.
+## Explicación Sencilla (No Técnica)
+Este archivo pone en marcha toda la aplicación. Crea la escena 3D, conecta los controles, enlaza la interfaz con el modelado, activa la edición de texturas, prepara la exportación y ahora también permite cargar modelos `OBJ`, `FBX` y proyectos guardados del propio editor.
 
-## Explicacion Tecnica
-`script.js` actua como bootstrap del proyecto:
-- Importa los modulos de escena, estado, UI, entradas, bloques, control de bloques con raton, menu contextual de bloques, caras, undo/redo, teclado, seleccion, estadisticas, limpieza de lineas y heartbeat.
-- Importa tambien el nuevo editor UV visual para la recolocacion de texturas.
-- Importa tambien el controlador del nuevo modo de trabajo con 4 vistas ortograficas y una previsualizacion 3D.
-- Importa tambien un pequeno rastreador de FPS para calcular el rendimiento medio de render.
-- Inicializa `scene`, `camera`, `renderer` y `controls` con `initScene`.
-- Crea el estado compartido con `createState` y lo distribuye a los gestores (entries, blocks, graph, faces, undo).
-- Registra el punto de origen para que pueda ocultarse cuando una cara lo cubre.
-- Conecta el listener de teclado con `attachKeyboardControls` para soportar dibujo normal y modo bloques con teclado.
-- Conecta `attachMouseBlockControls` para permitir colocar y borrar cubos con el raton en el modo correspondiente.
-- Conecta `attachBlockContextMenu` para permitir dividir cubos con click derecho en el modo de bloques con teclado.
-- Conecta el boton de limpieza con `createCleanupManager` para eliminar lineas sin cara.
-- Inicia el bucle de animacion con `requestAnimationFrame`.
-- En cada actualizacion recalcula los vertices visibles, oculta el cursor naranja en los modos de bloques para no tapar la pieza seleccionada y, cuando el modo de 4 vistas esta activo, fuerza que todos los puntos se mantengan visibles para que el usuario pueda construir el volumen desde las proyecciones.
-- Ya no recalcula estadisticas visuales de caras, vertices o lineas para la UI, porque la capa superior se ha simplificado a mostrar solo coordenadas.
-- Conecta los radio buttons del tipo de control para alternar entre dibujo normal, modo puntos, bloques con teclado o bloques con raton, limpiar selecciones y mantener sincronizado el indicador flotante que aparece cuando el usuario cambia de modo con `Meta + rueda`.
-- Escucha tambien las acciones enviadas por los menus nativos de la ventana (`set-geometry`, `cleanup-lines`, `merge-blocks`, `merge-selected-blocks`, `toggle-fps`) y las redirige a la misma logica que ya usaba la interfaz web.
-- Reutiliza el mismo `cleanupManager` antes de exportar a GLB u OBJ para eliminar automaticamente lineas sueltas y asegurar que el archivo final salga limpio.
-- Conecta un boton de cambio global de modo de trabajo para entrar o salir del flujo de modelado por 4 vistas.
-- En el bucle de animacion decide si renderiza una sola vista perspectiva o si delega el render en el controlador multivista.
-- En ese mismo bucle alimenta el rastreador de FPS y actualiza el texto de rendimiento solo con un promedio suavizado para evitar parpadeos.
-- Mantiene sincronizados el gestor de texturas, el alcance UV elegido por el usuario y el editor UV mediante una funcion auxiliar que refresca las herramientas de texturizado segun el contexto.
-- Activa o desactiva el nuevo acceso rapido de texturas segun si hay una cara seleccionada y conecta su boton directo de "Aplicar textura" con la aplicacion sobre esa seleccion concreta.
-- El boton global "Editar UV" abre una ventana modal de texturas y, si ya existe un objetivo valido, abre tambien la sesion UV correspondiente sobre una parte seleccionada o sobre toda la malla.
-- Arranca el envio de heartbeats para el cierre automatico del servidor.
+## Explicación Técnica
+`script.js` es el punto de arranque del proyecto y coordina los módulos principales.
 
-Este archivo queda deliberadamente pequeno y declarativo para evitar que la logica principal vuelva a mezclarse en un solo bloque.
+Hace lo siguiente:
+- Inicializa escena, cámara, renderer y controles orbitales.
+- Crea el estado compartido y los gestores de puntos, bloques, caras, grafos, undo/redo, limpieza, texturas, UV, FPS, importación y proyectos.
+- Registra el punto de origen inicial para el sistema de líneas y caras.
+- Conecta teclado, selección con ratón, controles de bloques con ratón y menú contextual de bloques.
+- Mantiene una función `updateUI()` que recalcula vértices visibles, sincroniza el panel superior y habilita o deshabilita acciones de selección y texturas.
+- Escucha acciones del menú nativo o HTML para limpiar, fusionar, abrir `Editar UV`, exportar, guardar proyecto y cargar modelos o proyectos.
+- Antes de exportar, reutiliza el mismo limpiador de líneas sin cara para no sacar geometría auxiliar al archivo final.
+- Usa `createModelImporter(...)` para vaciar el modelo actual y reconstruirlo con las mallas importadas.
+- Usa `createProjectIO(...)` para guardar un snapshot editable completo y restaurarlo después.
+- Ejecuta un bucle de animación sencillo: actualiza FPS, refresca `OrbitControls` y renderiza la escena principal.
+
+El antiguo flujo del modo 4 vistas ya no forma parte del arranque ni del renderizado.

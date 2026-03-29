@@ -402,12 +402,7 @@ export function attachKeyboardControls({
     onUpdate
 }) {
 
-    function deleteSelectedBlock() {
-        const selectedBlocks = blockManager?.getSelectedEntries?.() ?? [];
-        const blocksToDelete = selectedBlocks.length > 0
-            ? selectedBlocks
-            : [state.selectedBlock ?? state.hoveredBlock].filter((entry) => entry?.active);
-
+    function deleteBlockEntries(blocksToDelete) {
         if (blocksToDelete.length === 0) return;
 
         for (const blockEntry of blocksToDelete) {
@@ -428,6 +423,21 @@ export function attachKeyboardControls({
         });
 
         onUpdate();
+    }
+
+    function deleteSelectedBlock() {
+        const selectedBlocks = blockManager?.getSelectedEntries?.() ?? [];
+        const blocksToDelete = selectedBlocks.length > 0
+            ? selectedBlocks
+            : [state.selectedBlock ?? state.hoveredBlock].filter((entry) => entry?.active);
+
+        deleteBlockEntries(blocksToDelete);
+    }
+
+    function deleteHoveredBlock() {
+        const hoveredBlock = state.hoveredBlock?.active ? state.hoveredBlock : null;
+        if (!hoveredBlock) return;
+        deleteBlockEntries([hoveredBlock]);
     }
 
     function deleteSelectedPoint() {
@@ -608,6 +618,17 @@ export function attachKeyboardControls({
             return;
         }
 
+        if (
+            key === 'x'
+            && state.workMode === 'classic'
+            && (state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse')
+            && blockManager
+        ) {
+            event.preventDefault();
+            deleteHoveredBlock();
+            return;
+        }
+
         if (hasModifier) return;
         const movementKey = {
             ArrowUp: 'up',
@@ -698,7 +719,7 @@ export function attachKeyboardControls({
             onUpdate();
             return;
         }
-        if (state.controlMode === 'blocks-mouse' || state.controlMode === 'points') {
+        if (state.controlMode === 'blocks-mouse') {
             return;
         }
 

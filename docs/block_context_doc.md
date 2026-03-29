@@ -10,7 +10,7 @@ El desplazamiento ahora se activa con doble click izquierdo sobre el mismo cubo 
 `src/block_context.js` expone `attachBlockContextMenu(...)` que:
 - Escucha el evento `contextmenu` en el canvas cuando `controlMode` es `blocks-keyboard`.
 - Usa `Raycaster` para detectar el bloque bajo el cursor.
-- Muestra un menu flotante con la accion "Dividir".
-- Llama a `blockManager.splitBlock` y registra una accion `block-split` en `undoManager` para la división.
-- Para desplazar, escucha `pointerdown`/`pointerup` sobre bloques activos y solo activa `TransformControls` cuando detecta dos clicks cortos seguidos sobre la misma pieza. La pieza pulsada pasa a ser tambien la seleccionada persistente, por lo que permanece naranja mientras siga siendo la referencia actual. Durante el arrastre se desactiva `OrbitControls` para evitar giro de cámara. Al pulsar Escape/Enter, se registra un evento `block-move` en el `undoManager` y reposiciona la entidad lógicamente usando `blockManager.updateBlockPosition()`.
+- Muestra un menu flotante con la accion "Dividir" y, si el bloque pulsado forma parte de una seleccion multiple, aplica la accion a toda esa seleccion.
+- Reutiliza `blockManager.splitBlock` tanto desde ese menu como desde el atajo `Ctrl + D`. Si el raton esta sobre un bloque, el atajo prioriza siempre ese bloque; si ademas pertenece a una seleccion multiple, la accion se aplica a toda esa seleccion y queda registrada como una unica accion `block-split` en `undoManager`.
+- Para desplazar, escucha `pointerdown`/`pointerup` sobre bloques activos y solo activa `TransformControls` cuando detecta dos clicks cortos seguidos sobre la misma pieza. Si esa pieza ya formaba parte de una seleccion multiple, conserva la seleccion en lugar de reemplazarla. Durante el arrastre se desactiva `OrbitControls` para evitar giro de cámara. Al pulsar Escape/Enter, se registra un evento `block-move` en el `undoManager` y reposiciona la entidad lógicamente usando `blockManager.updateBlockPosition()`.
 - Oculta el menu cuando se hace click fuera o se cambia de modo.

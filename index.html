@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Simple 3D Creator</title>
+  <style>
+    html, body {
+      margin: 0;
+      background: #000;
+      color: #e4e8ee;
+    }
+  </style>
   
   <!-- Modern Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,6 +21,52 @@
 </head>
 <body>
   <div id="top-menu-bar" class="menu-bar">
+    <div class="menu-group">
+      <button id="file-menu-btn" class="menu-button" type="button" aria-expanded="false" aria-controls="file-menu">
+        Archivo
+      </button>
+      <div id="file-menu" class="menu-dropdown menu-dropdown-compact" hidden>
+        <button id="save-project-button" class="menu-item-button" type="button">
+          Guardar proyecto
+        </button>
+        <button id="load-project-button" class="menu-item-button" type="button">
+          Cargar proyecto
+        </button>
+        <button id="import-obj-button" class="menu-item-button" type="button">
+          Cargar modelo OBJ
+        </button>
+        <button id="import-fbx-button" class="menu-item-button" type="button">
+          Cargar modelo FBX
+        </button>
+        <button id="export-gltf-btn" class="menu-item-button" type="button">
+          Exportar GLB
+        </button>
+        <button id="export-obj-btn" class="menu-item-button" type="button">
+          Exportar OBJ
+        </button>
+      </div>
+    </div>
+
+    <div class="menu-group">
+      <button id="edit-menu-btn" class="menu-button" type="button" aria-expanded="false" aria-controls="edit-menu">
+        Edicion
+      </button>
+      <div id="edit-menu" class="menu-dropdown menu-dropdown-compact" hidden>
+        <button id="cleanup-lines-button" class="menu-item-button" type="button">
+          Eliminar lineas sin cara
+        </button>
+        <button id="merge-blocks-button" class="menu-item-button" type="button">
+          Fusionar bloques
+        </button>
+        <button id="merge-selected-blocks-button" class="menu-item-button" type="button" disabled>
+          Fusionar seleccion
+        </button>
+        <button id="open-uv-editor-btn" class="menu-item-button" type="button">
+          Editar UV
+        </button>
+      </div>
+    </div>
+
     <div class="menu-group">
       <button id="inventory-menu-btn" class="menu-button" type="button" aria-expanded="false" aria-controls="inventory-menu">
         Inventario
@@ -51,18 +104,15 @@
     </div>
 
     <div class="menu-group">
-      <button id="edit-menu-btn" class="menu-button" type="button" aria-expanded="false" aria-controls="edit-menu">
-        Edicion
+      <button id="view-menu-btn" class="menu-button" type="button" aria-expanded="false" aria-controls="view-menu">
+        Ver
       </button>
-      <div id="edit-menu" class="menu-dropdown menu-dropdown-compact" hidden>
-        <button id="cleanup-lines-button" class="menu-item-button" type="button">
-          Eliminar lineas sin cara
+      <div id="view-menu" class="menu-dropdown menu-dropdown-compact" hidden>
+        <button id="toggle-editor-help-btn" class="menu-item-button" type="button">
+          Ocultar ayuda rapida
         </button>
-        <button id="merge-blocks-button" class="menu-item-button" type="button">
-          Fusionar bloques
-        </button>
-        <button id="merge-selected-blocks-button" class="menu-item-button" type="button" disabled>
-          Fusionar seleccion
+        <button id="toggle-fps-btn" class="menu-item-button" type="button">
+          Mostrar FPS
         </button>
       </div>
     </div>
@@ -83,22 +133,14 @@
     </div>
 
     <div id="ui-actions" class="actions-panel">
-      <button id="toggle-work-mode-btn" class="action-button secondary work-mode-toggle" type="button">
-        Activar modo 4 vistas
-      </button>
-
       <div class="control-panel">
         <div class="control-title">Tipo de control</div>
         <label class="radio-option">
-          <input type="radio" name="control-mode" value="lines" checked>
+          <input type="radio" name="control-mode" value="lines">
           <span>Lineas</span>
         </label>
         <label class="radio-option">
-          <input type="radio" name="control-mode" value="points">
-          <span>Puntos</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="control-mode" value="blocks-keyboard">
+          <input type="radio" name="control-mode" value="blocks-keyboard" checked>
           <span>Bloques (teclado)</span>
         </label>
         <label class="radio-option">
@@ -109,42 +151,83 @@
           <input type="radio" name="control-mode" value="select-face">
           <span>Seleccionar cara</span>
         </label>
-      </div>
-      <button id="clear-point-selection-button" class="action-button secondary" type="button" disabled>
-        Deseleccionar puntos
-      </button>
-      <button id="open-uv-editor-btn" class="action-button secondary" type="button">
-        Editar UV
-      </button>
-
-      <div id="quick-texture-panel" class="quick-texture-panel" data-expanded="false">
-        <div class="quick-texture-header">
-          <div>
-            <div class="control-title">Texturas rapidas</div>
-            <p id="quick-texture-status" class="panel-hint">Selecciona una cara para usar el acceso rapido.</p>
+        <div class="radio-option-group" data-control-advanced="select-face-neighbors">
+          <label class="radio-option">
+            <input type="radio" name="control-mode" value="select-face-neighbors">
+            <span>Caras vecinas</span>
+          </label>
+          <div id="face-neighbor-controls" class="control-subpanel" hidden>
+            <label class="range-option compact">
+              <span>Caras vecinas</span>
+              <div class="control-inline-group">
+                <input
+                  type="range"
+                  id="face-neighbor-depth-input"
+                  min="0"
+                  max="12"
+                  step="1"
+                  value="1"
+                >
+                <output id="face-neighbor-depth-value" for="face-neighbor-depth-input">1</output>
+              </div>
+            </label>
           </div>
-          <button id="toggle-quick-textures-btn" class="action-button secondary small" type="button">
-            Mostrar lista
-          </button>
         </div>
-        <div id="quick-texture-content" class="quick-texture-content" style="display: none;">
-          <div id="quick-texture-list" class="texture-list quick-texture-list">
-            <!-- Quick texture items will be added here -->
-          </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom-left-tools">
+    <div id="editor-help-panel" class="editor-help-panel">
+      <div class="control-title">Ayuda visual</div>
+      <div class="help-shortcuts help-shortcuts-overview" aria-label="Atajos generales">
+        <div class="help-shortcut-card">
+          <span class="help-shortcut-icon" aria-hidden="true">LMB</span>
+          <span class="help-shortcut-keys">Izq + arrastrar</span>
+          <span class="help-shortcut-label">Girar</span>
         </div>
-        <button id="quick-upload-texture-btn" class="action-button secondary" type="button">
-          Cargar textura
-        </button>
-        <button id="quick-apply-texture-btn" class="action-button primary" type="button" disabled>
-          Aplicar textura
+        <div class="help-shortcut-card">
+          <span class="help-shortcut-icon" aria-hidden="true">RMB</span>
+          <span class="help-shortcut-keys">Der + arrastrar</span>
+          <span class="help-shortcut-label">Mover</span>
+        </div>
+        <div class="help-shortcut-card">
+          <span class="help-shortcut-icon" aria-hidden="true">MW</span>
+          <span class="help-shortcut-keys">Rueda</span>
+          <span class="help-shortcut-label">Zoom</span>
+        </div>
+        <div class="help-shortcut-card">
+          <span class="help-shortcut-icon" aria-hidden="true">CMD</span>
+          <span class="help-shortcut-keys">⌘ + rueda</span>
+          <span class="help-shortcut-label">Modo</span>
+        </div>
+      </div>
+      <div class="editor-help-mode">
+        <strong id="editor-help-mode-title">Bloques (teclado)</strong>
+        <div id="editor-help-mode-shortcuts" class="help-shortcuts" aria-live="polite"></div>
+      </div>
+    </div>
+    <div id="quick-texture-panel" class="quick-texture-panel" data-expanded="false">
+      <div class="quick-texture-header">
+        <div>
+          <div class="control-title">Texturas</div>
+          <p id="quick-texture-status" class="panel-hint">Selecciona una cara para aplicar una textura.</p>
+        </div>
+        <button id="toggle-quick-textures-btn" class="action-button secondary small" type="button">
+          Lista
         </button>
       </div>
-
-      <div class="export-panel" style="margin-top: 20px;">
-        <div class="control-title">Exportar Modelo</div>
-        <div style="display: flex; gap: 8px;">
-          <button id="export-gltf-btn" class="action-button primary" style="flex: 1;" type="button">GLB (con textura)</button>
-          <button id="export-obj-btn" class="action-button secondary" style="flex: 1;" type="button">OBJ (simple)</button>
+      <div class="texture-action-row compact">
+        <button id="quick-upload-texture-btn" class="action-button secondary small" type="button">
+          Cargar
+        </button>
+        <button id="quick-apply-texture-btn" class="action-button primary small" type="button" disabled>
+          Aplicar
+        </button>
+      </div>
+      <div id="quick-texture-content" class="quick-texture-content" style="display: none;">
+        <div id="quick-texture-list" class="texture-list quick-texture-list">
+          <!-- Quick texture items will be added here -->
         </div>
       </div>
     </div>
@@ -154,50 +237,6 @@
     <span class="control-mode-toast-label">Tipo de control</span>
     <strong id="control-mode-toast-value">Lineas</strong>
     <span class="control-mode-toast-hint">Meta + rueda del raton</span>
-  </div>
-
-  <div id="blueprint-workspace" class="blueprint-workspace" style="display: none;">
-    <div id="blueprint-view-top" class="blueprint-panel blueprint-viewport-card">
-      <div class="blueprint-panel-head">
-        <span class="blueprint-label">Arriba</span>
-        <span id="blueprint-depth-top" class="blueprint-depth">Plano Y: 0.0</span>
-      </div>
-      <p class="blueprint-view-copy">Trabaja sobre el plano X/Z viendo el modelo desde arriba.</p>
-    </div>
-
-    <div id="blueprint-view-right" class="blueprint-panel blueprint-viewport-card">
-      <div class="blueprint-panel-head">
-        <span class="blueprint-label">Derecha</span>
-        <span id="blueprint-depth-right" class="blueprint-depth">Plano X: 0.0</span>
-      </div>
-      <p class="blueprint-view-copy">Ajusta altura y profundidad mirando el lateral derecho.</p>
-    </div>
-
-    <div id="blueprint-view-left" class="blueprint-panel blueprint-viewport-card">
-      <div class="blueprint-panel-head">
-        <span class="blueprint-label">Izquierda</span>
-        <span id="blueprint-depth-left" class="blueprint-depth">Plano X: 0.0</span>
-      </div>
-      <p class="blueprint-view-copy">Comprueba la misma silueta lateral desde el lado opuesto.</p>
-    </div>
-
-    <div id="blueprint-view-bottom" class="blueprint-panel blueprint-viewport-card">
-      <div class="blueprint-panel-head">
-        <span class="blueprint-label">Abajo</span>
-        <span id="blueprint-depth-bottom" class="blueprint-depth">Plano Y: 0.0</span>
-      </div>
-      <p class="blueprint-view-copy">Revisa cierres y conexiones viendo la base del volumen.</p>
-    </div>
-
-    <div id="blueprint-preview-panel" class="blueprint-panel blueprint-preview-panel">
-      <div class="blueprint-panel-head">
-        <span class="blueprint-label">Previsualizacion 3D</span>
-        <span id="blueprint-preview-status" class="blueprint-depth">Cursor activo en X 0.0 / Y 0.0 / Z 0.0</span>
-      </div>
-      <p class="blueprint-hint">
-        Clic sobre un punto para seleccionarlo. Clic en vacio para mover el cursor. Manten Mayus y haz clic para unir el punto o cursor activo con otro punto y formar nuevas caras.
-      </p>
-    </div>
   </div>
 
   <div id="texture-modal" class="modal-backdrop" style="display: none;">
@@ -248,7 +287,7 @@
             <p class="panel-hint">Usa "Seleccionar cara" si quieres texturizar solo una parte concreta. Si eliges "Modelo completo", la textura y el editor UV actuarán sobre toda la malla disponible.</p>
           </div>
           <div class="texture-upload-row">
-            <input type="file" id="texture-upload-input" accept="image/*" style="display: none;">
+            <input type="file" id="texture-upload-input" accept=".png,.apng,.jpg,.jpeg,.jpe,.jfif,.pjpeg,.pjp,.webp,.avif,.gif,.bmp,.dib,.svg,.svgz,.ico,.cur,.tif,.tiff,.heic,.heif,.qoi,.tga,.pnm,.pbm,.pgm,.ppm,.pam,image/*" style="display: none;">
             <button id="texture-upload-btn" class="action-button secondary" type="button">Cargar Textura</button>
           </div>
           <div id="texture-list" class="texture-list texture-list-grid">
@@ -293,6 +332,8 @@
   </script>
 
   <!-- Main logic -->
+  <input type="file" id="model-import-input" accept=".obj,.fbx" style="display: none;">
+  <input type="file" id="project-import-input" accept=".s3dc,application/json" style="display: none;">
   <script type="module" src="script.js"></script>
 </body>
 </html>

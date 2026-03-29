@@ -364,22 +364,42 @@ function collectExportBlockMeshes(blockManager, state) {
 }
 
 function saveString(text, filename) {
-    save(new Blob([text], { type: 'text/plain' }), filename);
+    return save(new Blob([text], { type: 'text/plain' }), filename, 'Texto (*.txt)');
 }
 
 function saveArrayBuffer(buffer, filename) {
-    save(new Blob([buffer], { type: 'application/octet-stream' }), filename);
+    const extension = filename.split('.').pop()?.toLowerCase() ?? '*';
+    return save(new Blob([buffer], { type: 'application/octet-stream' }), filename, `Archivo (${extension === '*' ? '*.*' : `*.${extension}`})`);
 }
 
-function save(blob, filename) {
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error ?? new Error('No se pudo leer el archivo a exportar.'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function save(blob, filename, fileType = 'Archivos (*.*)') {
+    if (window.pywebview?.api?.save_export_file) {
+        const dataUrl = await blobToDataUrl(blob);
+        const result = await window.pywebview.api.save_export_file(dataUrl, filename, fileType);
+        if (result?.saved || result?.cancelled) {
+            return;
+        }
+        throw new Error(result?.error ?? 'No se pudo guardar el archivo exportado.');
+    }
+
     const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
     link.style.display = 'none';
-    link.href = URL.createObjectURL(blob);
+    link.href = objectUrl;
     link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
 function createExportGroup(state, blockManager) {
@@ -409,7 +429,10 @@ export function exportGLTF(state, blockManager) {
     exporter.parse(
         exportGroup,
         function (gltf) {
-            saveArrayBuffer(gltf, 'modelo_3d.glb');
+            saveArrayBuffer(gltf, 'modelo_3d.glb').catch((error) => {
+                console.error('Error al guardar el GLB:', error);
+                alert("Hubo un error al guardar el modelo.");
+            });
         },
         function (error) {
             console.error('Error al exportar a GLTF/GLB:', error);
@@ -499,7 +522,7 @@ export async function exportOBJ(state, blockManager) {
 
     try {
         const zipBlob = await zip.generateAsync({ type: "blob" });
-        save(zipBlob, 'modelo_3d.zip');
+        await save(zipBlob, 'modelo_3d.zip', 'ZIP (*.zip)');
     } catch (e) {
         console.error("Error al generar el ZIP", e);
         alert("Ocurrió un error al generar el archivo ZIP.");

@@ -16,10 +16,18 @@ function getBlockMaterialIndex(face) {
     return Math.floor(face.faceIndex / 2);
 }
 
+function isImportedBlockFace(face) {
+    return face?.data?.entry?.geometryType?.startsWith?.('imported-') ?? false;
+}
+
+function shouldTreatFaceAsWholeMesh(face) {
+    return Boolean(face?.applyToWholeMesh || isImportedBlockFace(face));
+}
+
 function getFaceMaterial(face) {
     if (!face?.mesh?.material) return null;
     if (Array.isArray(face.mesh.material)) {
-        if (face.applyToWholeMesh) {
+        if (shouldTreatFaceAsWholeMesh(face)) {
             return face.mesh.material[0] ?? null;
         }
         return face.mesh.material[getBlockMaterialIndex(face)] ?? null;
@@ -51,7 +59,7 @@ function clearMeshEmissive(mesh) {
 
 function getFaceIdentity(face) {
     if (!face?.mesh) return '';
-    if (face.data?.type === 'block' && !face.applyToWholeMesh) {
+    if (face.data?.type === 'block' && !shouldTreatFaceAsWholeMesh(face)) {
         return `block:${face.mesh.uuid}:${getBlockMaterialIndex(face)}`;
     }
     return `mesh:${face.mesh.uuid}`;
@@ -59,7 +67,7 @@ function getFaceIdentity(face) {
 
 function getFaceTriangles(face) {
     if (!face?.mesh) return [];
-    if (face.data?.type === 'block' && !face.applyToWholeMesh) {
+    if (face.data?.type === 'block' && !shouldTreatFaceAsWholeMesh(face)) {
         return getBlockFaceTriangles(face.mesh, face.faceIndex);
     }
     return getAllTriangles(face.mesh);
@@ -188,14 +196,17 @@ function getBlockFaceTriangles(mesh, faceIndex) {
 function collectUvTargets(selectedFaces) {
     return selectedFaces.map((face) => {
         const mesh = face.mesh;
+        const treatAsWholeMesh = shouldTreatFaceAsWholeMesh(face);
         if (face.data?.type === 'block') {
             ensureUniqueGeometry(mesh);
-            ensureEditableBlockMaterials(mesh);
+            if (!treatAsWholeMesh) {
+                ensureEditableBlockMaterials(mesh);
+            }
         }
 
         const geometry = mesh.geometry;
         const uvAttribute = ensureUvAttribute(geometry);
-        const triangles = face.data?.type === 'block' && !face.applyToWholeMesh
+        const triangles = face.data?.type === 'block' && !treatAsWholeMesh
             ? getBlockFaceTriangles(mesh, face.faceIndex)
             : getAllTriangles(mesh);
         const refs = new Map();
@@ -756,6 +767,22 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         return ['x', 'y'];
     }
 
+    function isPointInsideBlock(point, entry) {
+        const dimensions = entry?.dimensions?.isVector3
+            ? entry.dimensions
+            : new THREE.Vector3(entry?.size ?? 1, entry?.size ?? 1, entry?.size ?? 1);
+        const half = dimensions.clone().multiplyScalar(0.5);
+        const epsilon = 1e-4;
+        return (
+            point.x >= entry.position.x - half.x - epsilon &&
+            point.x <= entry.position.x + half.x + epsilon &&
+            point.y >= entry.position.y - half.y - epsilon &&
+            point.y <= entry.position.y + half.y + epsilon &&
+            point.z >= entry.position.z - half.z - epsilon &&
+            point.z <= entry.position.z + half.z + epsilon
+        );
+    }
+
     function getProjectedFaceBounds(mesh, faceIndex, worldNormal) {
         const positionAttribute = mesh.geometry?.attributes?.position;
         if (!positionAttribute) return null;
@@ -1038,6 +1065,177 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         return result;
     }
 
+    function isNeighborFaceMode() {
+        return state.controlMode === 'select-face-neighbors';
+    }
+
+    function getNeighborFaceDepth() {
+        const rawValue = document.getElementById('face-neighbor-depth-input')?.value ?? '0';
+        const parsed = Number.parseInt(rawValue, 10);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return 0;
+        }
+        return parsed;
+    }
+
+    function getFaceWorldQuad(face) {
+        const geometry = face?.mesh?.geometry;
+        const positionAttribute = geometry?.getAttribute?.('position');
+        if (!geometry || !positionAttribute) return [];
+
+        const points = [];
+        const seen = new Set();
+        for (const triangle of getFaceTriangles(face)) {
+            for (const index of triangle) {
+                const vertex = new THREE.Vector3()
+                    .fromBufferAttribute(positionAttribute, index)
+                    .applyMatrix4(face.mesh.matrixWorld);
+                const key = getVertexKey(vertex);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                points.push(vertex);
+            }
+        }
+        return points;
+    }
+
+    function isFaceExposed(face) {
+        const entry = face?.data?.entry;
+        if (!entry?.active || !blockManager) return false;
+        const points = getFaceWorldQuad(face);
+        if (points.length === 0) return false;
+
+        const center = points.reduce((acc, point) => acc.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
+        const normal = new THREE.Vector3();
+        const firstTriangle = getFaceTriangles(face)[0];
+        if (!firstTriangle) return false;
+
+        const a = new THREE.Vector3()
+            .fromBufferAttribute(face.mesh.geometry.getAttribute('position'), firstTriangle[0])
+            .applyMatrix4(face.mesh.matrixWorld);
+        const b = new THREE.Vector3()
+            .fromBufferAttribute(face.mesh.geometry.getAttribute('position'), firstTriangle[1])
+            .applyMatrix4(face.mesh.matrixWorld);
+        const c = new THREE.Vector3()
+            .fromBufferAttribute(face.mesh.geometry.getAttribute('position'), firstTriangle[2])
+            .applyMatrix4(face.mesh.matrixWorld);
+        normal.crossVectors(c.clone().sub(b), a.clone().sub(b)).normalize();
+
+        const samplePoint = center.clone().add(normal.multiplyScalar(0.01));
+        return !blockManager.getBlockEntries().some((candidate) => {
+            if (!candidate.active || candidate === entry) return false;
+            return isPointInsideBlock(samplePoint, candidate);
+        });
+    }
+
+    function getFaceEdgeKeys(face) {
+        const points = getFaceWorldQuad(face);
+        if (points.length < 3) return [];
+
+        const center = points.reduce((acc, point) => acc.add(point), new THREE.Vector3()).multiplyScalar(1 / points.length);
+        const normal = new THREE.Vector3();
+        if (points.length >= 3) {
+            normal.crossVectors(
+                points[1].clone().sub(points[0]),
+                points[2].clone().sub(points[0])
+            ).normalize();
+        }
+
+        let tangent = points[0].clone().sub(center);
+        if (tangent.lengthSq() < 1e-8) {
+            tangent = new THREE.Vector3(1, 0, 0);
+        }
+        tangent.normalize();
+        let bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+        if (bitangent.lengthSq() < 1e-8) {
+            bitangent = new THREE.Vector3(0, 1, 0);
+        }
+
+        const orderedPoints = points
+            .map((point) => ({
+                point,
+                angle: Math.atan2(
+                    point.clone().sub(center).dot(bitangent),
+                    point.clone().sub(center).dot(tangent)
+                )
+            }))
+            .sort((left, right) => left.angle - right.angle)
+            .map((item) => item.point);
+
+        const edges = [];
+        for (let index = 0; index < orderedPoints.length; index += 1) {
+            const currentKey = getVertexKey(orderedPoints[index]);
+            const nextKey = getVertexKey(orderedPoints[(index + 1) % orderedPoints.length]);
+            edges.push(currentKey < nextKey ? `${currentKey}|${nextKey}` : `${nextKey}|${currentKey}`);
+        }
+        return edges;
+    }
+
+    function getNeighborFaceSelection(nextFace, depth) {
+        const entry = nextFace?.data?.entry;
+        if (!nextFace || !entry || entry.geometryType !== 'cube' || isImportedBlockFace(nextFace) || !blockManager) {
+            return nextFace ? [nextFace] : [];
+        }
+
+        const faces = [];
+        for (const candidateEntry of blockManager.getBlockEntries()) {
+            if (!candidateEntry.active || candidateEntry.geometryType !== 'cube' || !candidateEntry.mesh) continue;
+            for (let materialIndex = 0; materialIndex < 6; materialIndex += 1) {
+                const candidateFace = {
+                    mesh: candidateEntry.mesh,
+                    data: { type: 'block', entry: candidateEntry },
+                    faceIndex: materialIndex * 2
+                };
+                if (!isFaceExposed(candidateFace)) continue;
+                faces.push(candidateFace);
+            }
+        }
+
+        const nodes = new Map();
+        const edgeMap = new Map();
+        for (const face of faces) {
+            const faceId = getFaceIdentity(face);
+            nodes.set(faceId, face);
+            for (const edgeKey of getFaceEdgeKeys(face)) {
+                if (!edgeMap.has(edgeKey)) {
+                    edgeMap.set(edgeKey, []);
+                }
+                edgeMap.get(edgeKey).push(faceId);
+            }
+        }
+
+        const startId = getFaceIdentity({
+            mesh: nextFace.mesh,
+            data: { type: 'block', entry },
+            faceIndex: getBlockMaterialIndex(nextFace) * 2
+        });
+        if (!nodes.has(startId)) {
+            return [nextFace];
+        }
+
+        const visited = new Set([startId]);
+        const queue = [{ faceId: startId, distance: 0 }];
+        const selectedFaceIds = [];
+
+        while (queue.length > 0) {
+            const current = queue.shift();
+            selectedFaceIds.push(current.faceId);
+            if (current.distance >= depth) continue;
+
+            const currentFace = nodes.get(current.faceId);
+            for (const edgeKey of getFaceEdgeKeys(currentFace)) {
+                const adjacentIds = edgeMap.get(edgeKey) ?? [];
+                for (const adjacentFaceId of adjacentIds) {
+                    if (visited.has(adjacentFaceId) || adjacentFaceId === current.faceId) continue;
+                    visited.add(adjacentFaceId);
+                    queue.push({ faceId: adjacentFaceId, distance: current.distance + 1 });
+                }
+            }
+        }
+
+        return selectedFaceIds.map((faceId) => nodes.get(faceId)).filter(Boolean);
+    }
+
     function handleFaceHover(nextFace) {
         const isJoint = document.getElementById('joint-face-checkbox')?.checked;
 
@@ -1047,7 +1245,9 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (!nextFace) return;
 
         let facesToHover = [nextFace];
-        if (isJoint && nextFace.data && nextFace.data.type === 'block') {
+        if (isNeighborFaceMode()) {
+            facesToHover = getNeighborFaceSelection(nextFace, getNeighborFaceDepth());
+        } else if (isJoint && nextFace.data && nextFace.data.type === 'block' && !isImportedBlockFace(nextFace)) {
             facesToHover = getJointFaceBlocks(nextFace.mesh, nextFace.faceIndex);
         }
 
@@ -1070,7 +1270,9 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         }
 
         let facesToSelect = [nextFace];
-        if (isJoint && nextFace.data && nextFace.data.type === 'block') {
+        if (isNeighborFaceMode()) {
+            facesToSelect = getNeighborFaceSelection(nextFace, getNeighborFaceDepth());
+        } else if (isJoint && nextFace.data && nextFace.data.type === 'block' && !isImportedBlockFace(nextFace)) {
             facesToSelect = getJointFaceBlocks(nextFace.mesh, nextFace.faceIndex);
         }
 
@@ -1122,7 +1324,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
         return getSelectedFaces(state).map((face) => ({
             ...face,
-            applyToWholeMesh: false
+            applyToWholeMesh: shouldTreatFaceAsWholeMesh(face)
         }));
     }
 
@@ -1477,23 +1679,12 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             return;
         }
         
-        if (state.controlMode === 'select-face') {
+        if (state.controlMode === 'select-face' || state.controlMode === 'select-face-neighbors') {
             const face = pickFace();
             handleFaceHover(face);
             handleBlockHover(null);
             handleHover(null);
             handleGridHover(null);
-            hideJoinMenu();
-            hideLinePreview();
-            return;
-        }
-
-        if (state.controlMode === 'points') {
-            const entry = pickEntry(true);
-            handleHover(entry);
-            handleBlockHover(null);
-            handleGridHover(null);
-            handleFaceHover(null);
             hideJoinMenu();
             hideLinePreview();
             return;
@@ -1536,21 +1727,11 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             return;
         }
         
-        if (state.controlMode === 'select-face') {
+        if (state.controlMode === 'select-face' || state.controlMode === 'select-face-neighbors') {
             hideJoinMenu();
             hideLinePreview();
             const face = pickFace();
             handleFaceSelect(face);
-            return;
-        }
-
-        if (state.controlMode === 'points') {
-            hideJoinMenu();
-            hideLinePreview();
-            const entry = pickEntry(true);
-            handleSelect(entry);
-            handleGridHover(null);
-            handleFaceHover(null);
             return;
         }
 
@@ -1620,25 +1801,29 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         hideJoinMenu();
     }
 
+    function onDocumentClick(event) {
+        if (typeof event.button === 'number' && event.button !== 0) return;
+        if (event.shiftKey) return;
+        if (suppressClick) {
+            suppressClick = false;
+            return;
+        }
+        if (dragState) return;
+        if (joinMenu.contains(event.target)) return;
+        if (state.selectedPointKeys.length === 0) return;
+        clearPointSelection({ clearActive: true, notify: true });
+    }
+
     function onPointerDown(event) {
         if (state.workMode !== 'classic') return;
         if (event.button !== 0) return;
-        if (state.controlMode === 'select-face') {
+        if (state.controlMode === 'select-face' || state.controlMode === 'select-face-neighbors' || state.controlMode === 'blocks-keyboard') {
             clickDragState = {
                 startX: event.clientX,
                 startY: event.clientY,
                 moved: false
             };
         }
-        if (state.controlMode !== 'points') return;
-        if (!event.shiftKey) return;
-        updateMouse(event);
-        const entry = pickEntry(true);
-        if (!entry) return;
-        handleSelect(entry);
-        beginPointDrag(entry, event);
-        event.preventDefault();
-        event.stopPropagation();
     }
 
     function onPointerUp(event) {
@@ -1662,6 +1847,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
     document.addEventListener('pointerdown', onDocumentPointerDown);
+    document.addEventListener('click', onDocumentClick, true);
 
     joinAction.addEventListener('click', () => {
         if (!joinSelectedPoints()) {

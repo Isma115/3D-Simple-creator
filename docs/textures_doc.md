@@ -1,23 +1,19 @@
 # Documentación del Gestor de Texturas (`src/textures.js`)
 
 ## Explicación Sencilla (No Técnica)
-Este módulo se encarga de administrar las imágenes que subes para usarlas como texturas. Agrega un panel a la interfaz donde puedes:
-- Pulsar un botón para subir imágenes (por ejemplo `.png` o `.jpg`) desde tu ordenador.
-- Ver una pequeña previsualización redonda de las texturas que has cargado en una lista deslizable.
-- Seleccionar una de estas texturas (la elegida se resalta con un borde naranja).
-- Eliminar una textura de la lista haciendo click en la pequeña "x" roja que aparece al pasar el ratón.
-- Aplicar la textura a la cara seleccionada.
-- Usar un acceso rapido fuera de la ventana UV con una tira horizontal plegable y un boton directo de "Aplicar textura" para la cara seleccionada.
-- Cargar texturas tambien desde ese acceso rapido, sin depender de abrir la ventana UV.
-- Aplicar la textura tanto a una parte seleccionada como al modelo completo, segun el alcance elegido.
-- Avisar al editor UV qué textura está activa, para que el cuadrado de edición muestre la imagen correcta mientras recolocas la malla.
+Este módulo guarda las imágenes que subes como texturas y las muestra tanto en la ventana UV como en el pequeño panel rápido de abajo a la izquierda. Permite cargar, seleccionar, borrar y aplicar texturas sin repetir trabajo, y ahora deja elegir una lista mucho más amplia de formatos de imagen.
 
 ## Explicación Técnica
-El módulo `src/textures.js` expone la fábrica `createTextureManager()` y se comunica mediante *callbacks*.
-- **Estado Interno:** Mantiene un arreglo `textures` que almacena objetos con el formato `{ id, url, threeTexture }`. Contiene también `selectedTextureId` para referenciar el ítem activo en la lista de la interfaz de usuario.
-- **Carga de Archivos:** Utiliza un input `<input type="file" accept="image/*" style="display: none;">` que se "clica" por programación cuando el botón visible "Cargar Textura" es presionado. Se utiliza `URL.createObjectURL(file)` para generar una URL temporal del archivo en base64 en memoria de forma sincrónica.
-- **Three.js `TextureLoader`:** Se carga la URL local de la imagen usando el `THREE.TextureLoader`. Las texturas se preparan como `THREE.SRGBColorSpace` para corregir problemas de color y se les configura el mapeo `THREE.RepeatWrapping`.
-- **Limpieza de Memoria:** Cuando se elimina una textura mediante la "x", se invoca `URL.revokeObjectURL(...)` para limpiar la URL del navegador, y `threeTexture.dispose()` para liberar la memoria de GPU ocupada por Three.js, previniendo fugas de memoria, antes de eliminarla del array en JavaScript.
-- **Interacción:** El objeto devuelto implementa `show()`, `hide()`, `.onApply(callback)` y `.onSelectionChange(callback)`. En `script.js`, estos eventos se combinan con el alcance elegido por el usuario para aplicar la textura a la parte seleccionada o a toda la malla.
-- **Acceso rapido:** Mantiene una segunda lista horizontal sincronizada con la lista principal del modal. Ambas comparten la misma textura seleccionada, y el gestor expone `.onQuickApply(callback)` y `.setQuickApplyAvailable(boolean)` para activar o desactivar la aplicacion directa sobre la cara seleccionada.
-- **Carga compartida:** El boton principal y el rapido reutilizan el mismo `<input type="file">`, de modo que cualquier textura subida desde uno de los dos puntos aparece en ambas listas y queda seleccionada inmediatamente.
+`src/textures.js` expone `createTextureManager()` y funciona mediante callbacks.
+
+Detalles principales:
+- Mantiene una lista interna de texturas con su `id`, URL temporal y objeto `THREE.Texture`.
+- Usa un único `<input type="file">` para cargar imágenes desde el modal o desde el panel rápido.
+- Configura ese input con `image/*` más una lista explícita de extensiones frecuentes para no perder formatos que algunos sistemas no muestran bien en el selector: `PNG`, `APNG`, `JPG`, `JPEG`, `JPE`, `JFIF`, `PJPEG`, `PJP`, `WEBP`, `AVIF`, `GIF`, `BMP`, `DIB`, `SVG`, `SVGZ`, `ICO`, `CUR`, `TIF`, `TIFF`, `HEIC`, `HEIF`, `QOI`, `TGA`, `PNM`, `PBM`, `PGM`, `PPM` y `PAM`.
+- Sincroniza dos vistas de la misma colección: una cuadrícula en el modal UV y una tira compacta en el acceso rápido.
+- Expone `onApply(...)` y `onQuickApply(...)` para aplicar la textura al objetivo actual.
+- Expone `onSelectionChange(...)` para que el editor UV refresque la imagen activa.
+- Gestiona el estado de disponibilidad del panel rápido con `setQuickApplyAvailable(...)`.
+- Libera memoria al eliminar texturas con `texture.dispose()`.
+
+Tras la simplificación visual reciente, el panel rápido usa mensajes más cortos y un diseño más compacto, pero sigue compartiendo exactamente la misma colección de texturas que el modal.

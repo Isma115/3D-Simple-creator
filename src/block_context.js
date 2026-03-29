@@ -32,6 +32,28 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     let displacingEntry = null;
     let positionBeforeDisplace = null;
 
+    function getTargetEntries(preferredEntry = null, { hoveredFirst = false } = {}) {
+        const selectedEntries = blockManager.getSelectedEntries().filter((entry) => entry?.active);
+        const hoveredEntry = state.hoveredBlock?.active ? state.hoveredBlock : null;
+
+        if (hoveredFirst && hoveredEntry) {
+            return selectedEntries.includes(hoveredEntry) ? selectedEntries : [hoveredEntry];
+        }
+        if (preferredEntry?.active) {
+            return selectedEntries.includes(preferredEntry) ? selectedEntries : [preferredEntry];
+        }
+        if (selectedEntries.length > 0) {
+            return selectedEntries;
+        }
+        return hoveredEntry ? [hoveredEntry] : [];
+    }
+
+    function getPrimarySplitResult(splitResults) {
+        if (splitResults.length === 0) return null;
+        const selectedResult = splitResults.find((result) => result.parent === state.selectedBlock);
+        return selectedResult ?? splitResults[splitResults.length - 1];
+    }
+
     function finishDisplacement() {
         if (!displacingEntry) return;
 
@@ -59,7 +81,87 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     function onKeyDown(event) {
         if (displacingEntry && (event.key === 'Enter' || event.key === 'Escape')) {
             finishDisplacement();
+            return;
         }
+
+        if (!event.ctrlKey || event.altKey || event.shiftKey || event.metaKey) {
+            return;
+        }
+        if (event.code !== 'KeyD') return;
+        if (state.workMode !== 'classic') return;
+        if (state.controlMode !== 'blocks-keyboard' && state.controlMode !== 'blocks-mouse') return;
+
+        const targets = getTargetEntries(null, { hoveredFirst: true });
+        if (targets.length === 0) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        performSplit(targets);
+    }
+
+    function performSplit(entriesOrEntry) {
+        const requestedEntries = Array.isArray(entriesOrEntry)
+            ? entriesOrEntry
+            : getTargetEntries(entriesOrEntry);
+        const targets = requestedEntries.filter((entry, index, list) => (
+            entry?.active
+            && blockManager.canSplitBlock(entry)
+            && list.indexOf(entry) === index
+        ));
+        if (targets.length === 0) {
+            hideMenu();
+            return false;
+        }
+
+        const cursorBefore = state.currentPosition.clone();
+        const sizeBefore = state.currentBlockSize;
+        const splitResults = [];
+
+        for (const entry of targets) {
+            const result = blockManager.splitBlock(entry);
+            if (result) {
+                splitResults.push(result);
+            }
+        }
+
+        if (splitResults.length === 0) {
+            hideMenu();
+            return false;
+        }
+
+        const childEntries = splitResults.flatMap((result) => result.children);
+        const parentEntries = splitResults.map((result) => result.parent);
+        const primaryResult = getPrimarySplitResult(splitResults);
+        const primaryChild = primaryResult?.children?.[0] ?? childEntries[0] ?? null;
+
+        // Snap the current position to the center of the first child
+        state.currentBlockSize = primaryResult?.childSize ?? sizeBefore;
+        const offset = state.currentBlockSize / 2;
+        state.currentPosition.set(
+            primaryResult.parent.position.x - offset,
+            primaryResult.parent.position.y - offset,
+            primaryResult.parent.position.z - offset
+        );
+        state.cursorMesh.position.copy(state.currentPosition);
+        state.pathPoints = [state.currentPosition.clone()];
+
+        if (state.hoveredBlock && !state.hoveredBlock.active) {
+            state.hoveredBlock = null;
+        }
+        blockManager.setSelection(childEntries, primaryChild);
+
+        undoManager.pushAction({
+            kind: 'block-split',
+            parentEntries,
+            childEntries,
+            cursorBefore,
+            sizeBefore,
+            cursorAfter: state.currentPosition.clone(),
+            sizeAfter: state.currentBlockSize
+        });
+        onUpdate();
+        hideMenu();
+        return true;
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -101,7 +203,14 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
             finishDisplacement();
         }
 
-        selectEntry(entry);
+        const selectedEntries = blockManager.getSelectedEntries();
+        if (!selectedEntries.includes(entry)) {
+            selectEntry(entry);
+        } else {
+            state.currentPosition.copy(entry.position);
+            state.cursorMesh.position.copy(state.currentPosition);
+            state.pathPoints = [state.currentPosition.clone()];
+        }
         displacingEntry = entry;
         positionBeforeDisplace = entry.position.clone();
         transformControl.attach(entry.mesh);
@@ -109,9 +218,16 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
 
     function showMenu(x, y, entry) {
         currentEntry = entry;
-        const canSplit = blockManager.canSplitBlock(entry);
-        action.disabled = !canSplit;
-        action.textContent = canSplit ? 'Dividir' : 'No divisible';
+        const targets = getTargetEntries(entry);
+        const splittableTargets = targets.filter((target) => blockManager.canSplitBlock(target));
+        action.disabled = splittableTargets.length === 0;
+        if (splittableTargets.length === 0) {
+            action.textContent = 'No divisible';
+        } else if (targets.length > 1) {
+            action.textContent = 'Dividir seleccion';
+        } else {
+            action.textContent = 'Dividir';
+        }
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.style.display = 'block';
@@ -215,35 +331,7 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
 
     action.addEventListener('click', () => {
         if (!currentEntry) return;
-        const cursorBefore = state.currentPosition.clone();
-        const sizeBefore = state.currentBlockSize;
-        const result = blockManager.splitBlock(currentEntry);
-        if (!result) {
-            hideMenu();
-            return;
-        }
-
-        // Snap the current position to the center of the first child
-        state.currentBlockSize = result.childSize;
-        const offset = state.currentBlockSize / 2;
-        state.currentPosition.set(
-            currentEntry.position.x - offset,
-            currentEntry.position.y - offset,
-            currentEntry.position.z - offset
-        );
-        state.cursorMesh.position.copy(state.currentPosition);
-
-        undoManager.pushAction({
-            kind: 'block-split',
-            parentEntry: result.parent,
-            childEntries: result.children,
-            cursorBefore,
-            sizeBefore,
-            cursorAfter: state.currentPosition.clone(),
-            sizeAfter: state.currentBlockSize
-        });
-        onUpdate();
-        hideMenu();
+        performSplit(currentEntry);
     });
 
     renderer.domElement.addEventListener('pointerdown', beginPointerInteraction);

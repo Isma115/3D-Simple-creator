@@ -116,7 +116,8 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
             button: event.button,
             startX: event.clientX,
             startY: event.clientY,
-            moved: false
+            moved: false,
+            isContextAction: event.button === 2 || (event.button === 0 && event.ctrlKey)
         };
     }
 
@@ -131,21 +132,19 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
 
     function finishPointerInteraction(event) {
         if (!pointerState) return;
-        const current = pointerState;
-        pointerState = null;
-
         if (state.workMode !== 'classic') return;
         if (state.controlMode !== 'blocks-mouse') return;
-        if (current.moved) return;
-        if (event.button !== current.button) return;
-
-        updateMouse(event);
-        if (current.button === 0) {
-            handleLeftClick();
+        if (pointerState.moved) {
+            pointerState = null;
             return;
         }
-        if (current.button === 2) {
-            handleRightClick();
+        if (event.button !== pointerState.button) return;
+
+        updateMouse(event);
+        if (!pointerState.isContextAction && pointerState.button === 0) {
+            pointerState = null;
+            handleLeftClick();
+            return;
         }
     }
 
@@ -163,6 +162,11 @@ export function attachMouseBlockControls({ camera, renderer, state, blockManager
         if (state.workMode !== 'classic') return;
         if (state.controlMode === 'blocks-mouse') {
             event.preventDefault();
+            updateMouse(event);
+            if (pointerState && pointerState.isContextAction && !pointerState.moved) {
+                handleRightClick();
+            }
+            pointerState = null;
         }
     }
 

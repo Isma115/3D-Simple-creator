@@ -1,18 +1,18 @@
-# Documentacion de Entradas de Lineas y Puntos (`src/entries.js`)
+# Documentación de Entradas de Líneas y Puntos (`src/entries.js`)
 
-## Explicacion Sencilla (No Tecnica)
-Este modulo decide que lineas y puntos deben verse u ocultarse cuando una cara los tapa. Tambien se encarga de registrar cada nueva linea y punto.
+## Explicación Sencilla (No Técnica)
+Este módulo decide qué puntos y líneas se ven en pantalla y cuáles deben ocultarse porque una cara ya las tapa. También registra cada nuevo punto o línea que el usuario crea.
 
-## Explicacion Tecnica
-`src/entries.js` expone `createEntryManager(scene, planeFill)` y devuelve:
-- `registerLineEntry` y `registerPointEntry` para crear entradas con estado. Los puntos pueden pertenecer a origen de lineas o bloques.
-- `refreshEntryVisibility` que agrega o quita un mesh de la escena segun si esta activo o cubierto.
-- `updatePlaneVisibility` que revisa si un plano relleno cubre lineas y actualiza su visibilidad.
-- `applyVisibleVertices` decide que puntos se muestran segun el conjunto de vertices visibles, marca uno por vertice como visible permanente y evita duplicados por vertice. En modo puntos y en el modo de 4 vistas fuerza que todos los vertices sean elegibles para mostrar/seleccionar, pero ya no existe un conmutador global para verlos siempre.
-- `setHovered` y `setSelected` controlan el resaltado del punto bajo el cursor o seleccionado.
-- `getLineEntries` expone las lineas registradas para operaciones como el borrado.
-- `getPointEntriesByKey` permite acceder a puntos por vertice para activar o desactivar los que vienen de bloques.
-- `movePointEntries` permite reubicar un vertice y mantener sincronizado el indice interno por clave.
-- `getCounts` devuelve solo elementos visibles para el panel de estadisticas.
+## Explicación Técnica
+`src/entries.js` expone `createEntryManager(scene, planeFill)`.
 
-Internamente usa un conjunto `coveredBy` por entrada para saber que planos la cubren.
+Ofrece:
+- `registerLineEntry(...)` y `registerPointEntry(...)` para guardar nuevas entidades visuales con estado.
+- `refreshEntryVisibility(...)` para añadir o quitar un elemento de la escena según si está activo o cubierto.
+- `updatePlaneVisibility(...)` para ocultar líneas cubiertas por caras coplanares.
+- `applyLooseFaceVisibility(...)` para ocultar bordes cuando una cara libre ya los reemplaza.
+- `applyVisibleVertices(...)` para decidir qué vértices pueden verse y seleccionarse.
+- Métodos para marcar hover, selección y selección múltiple por clave de vértice.
+- Acceso a líneas y puntos existentes para borrado, movimiento o importación de estado.
+
+El criterio actual de visibilidad enseña solo los vértices útiles para el flujo activo y ya no depende de un modo separado de edición de puntos.

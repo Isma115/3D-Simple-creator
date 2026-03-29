@@ -6,6 +6,7 @@ import time
 import socket
 import os
 import json
+import base64
 
 try:
     import webview
@@ -99,6 +100,36 @@ def dispatch_frontend_event(window, event_name, detail):
     window.evaluate_js(script)
 
 
+class DesktopBridge:
+    def __init__(self, window_holder):
+        self.window_holder = window_holder
+
+    def save_export_file(self, data_url, suggested_name, file_type='Archivos (*.*)'):
+        window = self.window_holder.get('window')
+        if not window:
+            return {'saved': False, 'error': 'Ventana no disponible.'}
+
+        destination = window.create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename=suggested_name,
+            file_types=(file_type,)
+        )
+
+        if not destination:
+            return {'saved': False, 'cancelled': True}
+
+        target_path = destination[0] if isinstance(destination, (list, tuple)) else destination
+
+        try:
+            _, encoded = data_url.split(',', 1)
+            with open(target_path, 'wb') as file_handle:
+                file_handle.write(base64.b64decode(encoded))
+        except Exception as error:
+            return {'saved': False, 'error': str(error)}
+
+        return {'saved': True, 'path': target_path}
+
+
 def create_native_menu(window_holder):
     def send(action, **extra):
         detail = {'action': action, **extra}
@@ -112,6 +143,17 @@ def create_native_menu(window_holder):
         ('Cono', 'cone')
     ]
 
+    file_menu = Menu(
+        'Archivo',
+        [
+            MenuAction('Guardar proyecto', lambda: send('save-project')),
+            MenuAction('Cargar proyecto', lambda: send('load-project')),
+            MenuAction('Cargar modelo OBJ', lambda: send('import-obj')),
+            MenuAction('Cargar modelo FBX', lambda: send('import-fbx')),
+            MenuAction('Exportar GLB', lambda: send('export-gltf')),
+            MenuAction('Exportar OBJ', lambda: send('export-obj'))
+        ]
+    )
     inventory_menu = Menu(
         'Inventario',
         [MenuAction(title, lambda value=value: send('set-geometry', value=value)) for title, value in geometry_items]
@@ -121,26 +163,33 @@ def create_native_menu(window_holder):
         [
             MenuAction('Eliminar lineas sin cara', lambda: send('cleanup-lines')),
             MenuAction('Fusionar bloques', lambda: send('merge-blocks')),
-            MenuAction('Fusionar seleccion', lambda: send('merge-selected-blocks'))
+            MenuAction('Fusionar seleccion', lambda: send('merge-selected-blocks')),
+            MenuAction('Editar UV', lambda: send('open-uv-editor'))
         ]
     )
     view_menu = Menu(
         'Ver',
-        [MenuAction('Mostrar FPS', lambda: send('toggle-fps'))]
+        [
+            MenuAction('Mostrar u ocultar ayuda rapida', lambda: send('toggle-editor-help')),
+            MenuAction('Mostrar FPS', lambda: send('toggle-fps'))
+        ]
     )
-    return [inventory_menu, edit_menu, view_menu]
+    return [file_menu, edit_menu, inventory_menu, view_menu]
 
 
 def run_desktop_window(port, httpd):
     url = f"http://localhost:{port}?desktop=1&nativeMenus=1"
     window_holder = {'window': None}
+    bridge = DesktopBridge(window_holder)
     menus = create_native_menu(window_holder) if Menu and MenuAction else []
     window = webview.create_window(
         "Simple 3D Creator",
         url=url,
+        js_api=bridge,
         width=1440,
         height=960,
         min_size=(1100, 700),
+        background_color='#000000',
         menu=menus
     )
     window_holder['window'] = window

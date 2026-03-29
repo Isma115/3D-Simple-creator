@@ -5,30 +5,51 @@ export function createUI() {
     const geometryDisplay = document.getElementById('active-geometry-display');
     const fpsPanel = document.getElementById('fps-panel');
     const fpsDisplay = document.getElementById('fps-display');
-    const cleanupButton = document.getElementById('cleanup-lines-button');
-    const mergeBlocksButton = document.getElementById('merge-blocks-button');
-    const mergeSelectedBlocksButton = document.getElementById('merge-selected-blocks-button');
-    const clearPointSelectionButton = document.getElementById('clear-point-selection-button');
-    const toggleWorkModeButton = document.getElementById('toggle-work-mode-btn');
-    const controlModeInputs = Array.from(document.querySelectorAll('input[name="control-mode"]'));
-    const controlModeToast = document.getElementById('control-mode-toast');
-    const controlModeToastValue = document.getElementById('control-mode-toast-value');
-    const geometryInputs = Array.from(document.querySelectorAll('input[name="geometry-type"]'));
-    const geometryInventory = document.getElementById('geometry-inventory');
+    const fileMenuButton = document.getElementById('file-menu-btn');
+    const fileMenu = document.getElementById('file-menu');
     const inventoryMenuButton = document.getElementById('inventory-menu-btn');
     const inventoryMenu = document.getElementById('inventory-menu');
     const editMenuButton = document.getElementById('edit-menu-btn');
     const editMenu = document.getElementById('edit-menu');
+    const viewMenuButton = document.getElementById('view-menu-btn');
+    const viewMenu = document.getElementById('view-menu');
+    const cleanupButton = document.getElementById('cleanup-lines-button');
+    const mergeBlocksButton = document.getElementById('merge-blocks-button');
+    const mergeSelectedBlocksButton = document.getElementById('merge-selected-blocks-button');
+    const toggleEditorHelpButton = document.getElementById('toggle-editor-help-btn');
+    const toggleFpsButton = document.getElementById('toggle-fps-btn');
+    const controlModeInputs = Array.from(document.querySelectorAll('input[name="control-mode"]'));
+    const controlModeToast = document.getElementById('control-mode-toast');
+    const controlModeToastValue = document.getElementById('control-mode-toast-value');
+    const editorHelpPanel = document.getElementById('editor-help-panel');
+    const editorHelpModeTitle = document.getElementById('editor-help-mode-title');
+    const editorHelpModeShortcuts = document.getElementById('editor-help-mode-shortcuts');
+    const faceNeighborControls = document.getElementById('face-neighbor-controls');
+    const faceNeighborDepthInput = document.getElementById('face-neighbor-depth-input');
+    const faceNeighborDepthValue = document.getElementById('face-neighbor-depth-value');
+    const geometryInputs = Array.from(document.querySelectorAll('input[name="geometry-type"]'));
+    const geometryInventory = document.getElementById('geometry-inventory');
+    const saveProjectButton = document.getElementById('save-project-button');
+    const loadProjectButton = document.getElementById('load-project-button');
     const exportGltfButton = document.getElementById('export-gltf-btn');
     const exportObjButton = document.getElementById('export-obj-btn');
+    const importObjButton = document.getElementById('import-obj-button');
+    const importFbxButton = document.getElementById('import-fbx-button');
+    const modelImportInput = document.getElementById('model-import-input');
+    const projectImportInput = document.getElementById('project-import-input');
     const openUvEditorButton = document.getElementById('open-uv-editor-btn');
     const textureScopeInputs = Array.from(document.querySelectorAll('input[name="texture-target-scope"]'));
     const textureModal = document.getElementById('texture-modal');
     const closeTextureModalButton = document.getElementById('close-texture-modal-btn');
+
     let controlModeChangeHandler = null;
     let controlModeToastHideTimer = null;
     let nativeMenuActionHandler = null;
+    let modelImportHandler = null;
+    let projectImportHandler = null;
     let fpsVisible = false;
+    let editorHelpVisible = editorHelpPanel ? !editorHelpPanel.hidden : false;
+
     const controlModeLabels = new Map(controlModeInputs.map((input) => {
         const label = input.closest('label')?.querySelector('span')?.textContent?.trim() ?? input.value;
         return [input.value, label];
@@ -40,14 +61,43 @@ export function createUI() {
         pyramid: 'Piramide',
         cone: 'Cono'
     };
+    const controlModeHelp = {
+        lines: [
+            { icon: 'LMB', keys: 'Click', label: 'Trazar' },
+            { icon: 'SHF', keys: 'Mayus + click', label: 'Sumar' },
+            { icon: 'RMB', keys: 'Click der.', label: 'Unir' }
+        ],
+        'blocks-keyboard': [
+            { icon: 'WASD', keys: 'WASD', label: 'Cursor' },
+            { icon: 'ARW', keys: 'Flechas', label: 'Construir' },
+            { icon: 'CTRL', keys: 'Ctrl + D', label: 'Dividir' }
+        ],
+        'blocks-mouse': [
+            { icon: 'RMB', keys: 'Click der.', label: 'Colocar' },
+            { icon: 'LMB', keys: 'Click izq.', label: 'Borrar' },
+            { icon: 'CTRL', keys: 'Ctrl + D', label: 'Dividir' }
+        ],
+        'select-face': [
+            { icon: 'LMB', keys: 'Click', label: 'Elegir' },
+            { icon: 'TEX', keys: 'Aplicar', label: 'Textura' },
+            { icon: 'UV', keys: 'UV', label: 'Editar' }
+        ],
+        'select-face-neighbors': [
+            { icon: 'LMB', keys: 'Click', label: 'Base' },
+            { icon: 'N', keys: 'Deslizador', label: 'Vecinas' },
+            { icon: 'TEX', keys: 'Aplicar', label: 'Textura' }
+        ]
+    };
 
     if (hasNativeMenus) {
         document.body.dataset.nativeMenus = 'true';
     }
 
     const menus = [
+        { button: fileMenuButton, panel: fileMenu },
+        { button: editMenuButton, panel: editMenu },
         { button: inventoryMenuButton, panel: inventoryMenu },
-        { button: editMenuButton, panel: editMenu }
+        { button: viewMenuButton, panel: viewMenu }
     ].filter(({ button, panel }) => button && panel);
 
     function setMenuOpen(button, panel, open) {
@@ -59,10 +109,9 @@ export function createUI() {
         }
     }
 
-    function closeAllMenus(exceptPanel = null) {
+    function closeAllMenus() {
         for (const menu of menus) {
-            const shouldRemainOpen = menu.panel === exceptPanel && !menu.panel.hidden;
-            setMenuOpen(menu.button, menu.panel, shouldRemainOpen);
+            setMenuOpen(menu.button, menu.panel, false);
         }
     }
 
@@ -70,6 +119,32 @@ export function createUI() {
         const willOpen = panel.hidden;
         closeAllMenus();
         setMenuOpen(button, panel, willOpen);
+    }
+
+    function update({ position }) {
+        coordsDisplay.textContent = `X: ${position.x.toFixed(1)}, Y: ${position.y.toFixed(1)}, Z: ${position.z.toFixed(1)}`;
+    }
+
+    function openModelImportDialog(format) {
+        if (!modelImportInput) return;
+        modelImportInput.dataset.format = format;
+        modelImportInput.accept = format === 'fbx' ? '.fbx' : '.obj';
+        modelImportInput.value = '';
+        modelImportInput.click();
+    }
+
+    function openProjectImportDialog() {
+        if (!projectImportInput) return;
+        projectImportInput.value = '';
+        projectImportInput.click();
+    }
+
+    function bindMenuAction(button, callback) {
+        if (!button) return;
+        button.addEventListener('click', () => {
+            closeAllMenus();
+            callback();
+        });
     }
 
     for (const { button, panel } of menus) {
@@ -100,21 +175,37 @@ export function createUI() {
         });
     }
 
-    function update({ position }) {
-        coordsDisplay.textContent = `X: ${position.x.toFixed(1)}, Y: ${position.y.toFixed(1)}, Z: ${position.z.toFixed(1)}`;
+    if (importObjButton) {
+        bindMenuAction(importObjButton, () => openModelImportDialog('obj'));
     }
 
-    function onCleanupLines(handler) {
-        if (!cleanupButton) return;
-        cleanupButton.addEventListener('click', () => {
-            closeAllMenus();
-            handler();
+    if (importFbxButton) {
+        bindMenuAction(importFbxButton, () => openModelImportDialog('fbx'));
+    }
+
+    if (modelImportInput) {
+        modelImportInput.addEventListener('change', (event) => {
+            const file = event.target.files?.[0];
+            const format = modelImportInput.dataset.format ?? file?.name?.split('.').pop()?.toLowerCase() ?? '';
+            if (file && modelImportHandler) {
+                modelImportHandler({ file, format });
+            }
+            modelImportInput.value = '';
         });
     }
 
-    function onClearPointSelection(handler) {
-        if (!clearPointSelectionButton) return;
-        clearPointSelectionButton.addEventListener('click', handler);
+    if (projectImportInput) {
+        projectImportInput.addEventListener('change', (event) => {
+            const file = event.target.files?.[0];
+            if (file && projectImportHandler) {
+                projectImportHandler({ file });
+            }
+            projectImportInput.value = '';
+        });
+    }
+
+    function onCleanupLines(handler) {
+        bindMenuAction(cleanupButton, handler);
     }
 
     function onNativeMenuAction(handler) {
@@ -122,24 +213,15 @@ export function createUI() {
     }
 
     function onMergeBlocks(handler) {
-        if (!mergeBlocksButton) return;
-        mergeBlocksButton.addEventListener('click', () => {
-            closeAllMenus();
-            handler();
-        });
+        bindMenuAction(mergeBlocksButton, handler);
     }
 
     function onMergeSelectedBlocks(handler) {
-        if (!mergeSelectedBlocksButton) return;
-        mergeSelectedBlocksButton.addEventListener('click', () => {
-            closeAllMenus();
-            handler();
-        });
+        bindMenuAction(mergeSelectedBlocksButton, handler);
     }
 
     function onControlModeChange(handler) {
         controlModeChangeHandler = handler;
-        if (controlModeInputs.length === 0) return;
         for (const input of controlModeInputs) {
             input.addEventListener('change', () => {
                 if (input.checked) handler(input.value);
@@ -206,28 +288,26 @@ export function createUI() {
         return dominantDelta > 0 ? 1 : -1;
     }
 
-    function onWorkModeToggle(handler) {
-        if (!toggleWorkModeButton) return;
-        toggleWorkModeButton.addEventListener('click', () => {
-            const nextMode = toggleWorkModeButton.dataset.mode === 'blueprint' ? 'classic' : 'blueprint';
-            handler(nextMode);
-        });
-    }
-
-    function setWorkMode(mode) {
-        if (!toggleWorkModeButton) return;
-        const isBlueprint = mode === 'blueprint';
-        toggleWorkModeButton.dataset.mode = mode;
-        toggleWorkModeButton.dataset.active = isBlueprint ? 'true' : 'false';
-        toggleWorkModeButton.textContent = isBlueprint
-            ? 'Volver al modo clasico'
-            : 'Activar modo 4 vistas';
-    }
-
     function setControlMode(value) {
-        if (controlModeInputs.length === 0) return;
         for (const input of controlModeInputs) {
             input.checked = input.value === value;
+        }
+        if (faceNeighborControls) {
+            const showNeighborControls = value === 'select-face-neighbors';
+            faceNeighborControls.hidden = !showNeighborControls;
+        }
+        if (editorHelpModeTitle) {
+            editorHelpModeTitle.textContent = getControlModeLabel(value);
+        }
+        if (editorHelpModeShortcuts) {
+            const shortcuts = controlModeHelp[value] ?? [];
+            editorHelpModeShortcuts.innerHTML = shortcuts.map((shortcut) => `
+                <div class="help-shortcut-card">
+                    <span class="help-shortcut-icon" aria-hidden="true">${shortcut.icon}</span>
+                    <span class="help-shortcut-keys">${shortcut.keys}</span>
+                    <span class="help-shortcut-label">${shortcut.label}</span>
+                </div>
+            `).join('');
         }
     }
 
@@ -239,11 +319,6 @@ export function createUI() {
 
     function isTextureManagerVisible() {
         return textureModal ? textureModal.style.display !== 'none' : false;
-    }
-
-    function setClearPointSelectionEnabled(enabled) {
-        if (!clearPointSelectionButton) return;
-        clearPointSelectionButton.disabled = !enabled;
     }
 
     function setMergeSelectedBlocksEnabled(enabled) {
@@ -260,10 +335,29 @@ export function createUI() {
         }
     }
 
+    function setEditorHelpVisibility(visible) {
+        editorHelpVisible = visible;
+        if (editorHelpPanel) {
+            editorHelpPanel.hidden = !visible;
+            editorHelpPanel.setAttribute('aria-hidden', visible ? 'false' : 'true');
+            editorHelpPanel.style.display = visible ? 'flex' : 'none';
+        }
+        if (toggleEditorHelpButton) {
+            toggleEditorHelpButton.textContent = visible ? 'Ocultar ayuda rapida' : 'Mostrar ayuda rapida';
+        }
+    }
+
+    function toggleEditorHelpVisibility() {
+        setEditorHelpVisibility(!editorHelpVisible);
+    }
+
     function setFpsVisibility(visible) {
         fpsVisible = visible;
         if (fpsPanel) {
             fpsPanel.hidden = !visible;
+        }
+        if (toggleFpsButton) {
+            toggleFpsButton.textContent = visible ? 'Ocultar FPS' : 'Mostrar FPS';
         }
     }
 
@@ -277,22 +371,30 @@ export function createUI() {
     }
 
     function onExportGLTF(handler) {
-        if (!exportGltfButton) return;
-        exportGltfButton.addEventListener('click', handler);
+        bindMenuAction(exportGltfButton, handler);
     }
 
     function onExportOBJ(handler) {
-        if (!exportObjButton) return;
-        exportObjButton.addEventListener('click', handler);
+        bindMenuAction(exportObjButton, handler);
+    }
+
+    function onSaveProject(handler) {
+        bindMenuAction(saveProjectButton, handler);
+    }
+
+    function onImportProject(handler) {
+        projectImportHandler = handler;
+    }
+
+    function onImportModel(handler) {
+        modelImportHandler = handler;
     }
 
     function onOpenUvEditor(handler) {
-        if (!openUvEditorButton) return;
-        openUvEditorButton.addEventListener('click', handler);
+        bindMenuAction(openUvEditorButton, handler);
     }
 
     function onTextureTargetScopeChange(handler) {
-        if (textureScopeInputs.length === 0) return;
         for (const input of textureScopeInputs) {
             input.addEventListener('change', () => {
                 if (input.checked) handler(input.value);
@@ -312,12 +414,31 @@ export function createUI() {
     }
 
     function onGeometryChange(handler) {
-        if (geometryInputs.length === 0) return;
         for (const input of geometryInputs) {
             input.addEventListener('change', () => {
                 if (input.checked) handler(input.value);
             });
         }
+    }
+
+    if (faceNeighborDepthInput && faceNeighborDepthValue) {
+        const syncFaceNeighborDepth = () => {
+            faceNeighborDepthValue.textContent = faceNeighborDepthInput.value;
+        };
+        faceNeighborDepthInput.addEventListener('input', syncFaceNeighborDepth);
+        syncFaceNeighborDepth();
+    }
+
+    if (toggleEditorHelpButton) {
+        bindMenuAction(toggleEditorHelpButton, toggleEditorHelpVisibility);
+    }
+
+    if (toggleFpsButton) {
+        bindMenuAction(toggleFpsButton, toggleFpsVisibility);
+    }
+
+    if (loadProjectButton) {
+        bindMenuAction(loadProjectButton, openProjectImportDialog);
     }
 
     if (closeTextureModalButton) {
@@ -335,12 +456,27 @@ export function createUI() {
 
     window.addEventListener('simple3d-native-menu', (event) => {
         const detail = event.detail ?? {};
+
         if (detail.action === 'set-geometry' && detail.value) {
             setGeometry(detail.value);
         }
+
+        if (detail.action === 'import-obj') {
+            openModelImportDialog('obj');
+        }
+
+        if (detail.action === 'import-fbx') {
+            openModelImportDialog('fbx');
+        }
+
+        if (detail.action === 'load-project') {
+            openProjectImportDialog();
+        }
+
         if (detail.action === 'native-menus-ready' && hasNativeMenus) {
             closeAllMenus();
         }
+
         if (nativeMenuActionHandler) {
             nativeMenuActionHandler(detail);
         }
@@ -359,27 +495,32 @@ export function createUI() {
         cycleControlMode(step);
     }, { passive: false, capture: true });
 
+    setEditorHelpVisibility(editorHelpVisible);
+    setFpsVisibility(fpsVisible);
+
     return {
         update,
         onCleanupLines,
         onMergeBlocks,
         onMergeSelectedBlocks,
-        onClearPointSelection,
         onNativeMenuAction,
-        onWorkModeToggle,
         onControlModeChange,
-        setWorkMode,
         setControlMode,
         showTextureManager,
         isTextureManagerVisible,
-        setClearPointSelectionEnabled,
         setMergeSelectedBlocksEnabled,
         setGeometry,
+        setEditorHelpVisibility,
+        toggleEditorHelpVisibility,
         setFpsVisibility,
         toggleFpsVisibility,
         setFpsValue,
+        onSaveProject,
+        onImportProject,
+        openProjectImportDialog,
         onExportGLTF,
         onExportOBJ,
+        onImportModel,
         onOpenUvEditor,
         onTextureTargetScopeChange,
         getTextureTargetScope,

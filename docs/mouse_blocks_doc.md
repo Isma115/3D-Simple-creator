@@ -8,5 +8,5 @@ Este modulo permite construir cubos con el raton al estilo "Minecraft". Con clic
 - Usa `Raycaster` para detectar el cubo apuntado y la cara clicada.
 - Registra el inicio del gesto con `pointerdown` y solo confirma la accion en `pointerup` si el raton casi no se ha movido, evitando ediciones accidentales cuando el usuario realmente estaba arrastrando la vista.
 - Con click izquierdo desactiva el cubo y registra la accion en undo/redo.
-- Con click derecho calcula la posicion adyacente a la cara y crea un nuevo cubo, o coloca un cubo en el plano del suelo si no hay ninguno bajo el cursor.
+- Con click derecho usa `contextmenu` como punto de confirmacion para que la colocacion siga funcionando de forma estable en navegador y en macOS, y calcula la posicion adyacente a la cara o sobre el plano del suelo.
 - Sincroniza la posicion del cursor con el ultimo bloque colocado para mantener coherencia con el resto del sistema.

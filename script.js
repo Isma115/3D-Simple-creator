@@ -17,8 +17,9 @@ import { createCleanupManager } from './src/cleanup.js';
 import { createTextureManager } from './src/textures.js';
 import { exportGLTF, exportOBJ } from './src/export.js';
 import { createUvEditor } from './src/uv_editor.js';
-import { createWorkspaceModeController } from './src/workspace_mode.js';
 import { createFpsTracker } from './src/fps.js';
+import { createModelImporter } from './src/import.js';
+import { createProjectIO } from './src/project_io.js';
 
 const { scene, camera, renderer, controls } = initScene();
 const state = createState(scene);
@@ -44,6 +45,7 @@ const faceController = createFaceController({
 let selectionManager = null;
 
 const getCurrentTextureScope = () => ui.getTextureTargetScope();
+const normalizeControlMode = (mode) => mode === 'points' ? 'lines' : mode;
 const getCurrentUvSession = () => {
     return selectionManager?.getUvEditorSession?.(
         getCurrentTextureScope(),
@@ -68,14 +70,10 @@ const refreshTextureTools = () => {
 
 const updateUI = () => {
     const hideCursorForBlockModes = state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse';
-    const showAllPoints = state.controlMode === 'points' || state.workMode === 'blueprint';
-    const visibleVertices = showAllPoints
-        ? new Set(state.vertexPositions.keys())
-        : computeVisibleVertices(state);
+    const visibleVertices = computeVisibleVertices(state);
     state.cursorMesh.visible = !hideCursorForBlockModes;
     entryManager.applyLooseFaceVisibility(state.looseFaceVertices);
-    entryManager.applyVisibleVertices(visibleVertices, showAllPoints, true);
-    ui.setClearPointSelectionEnabled((state.controlMode === 'lines' || state.workMode === 'blueprint') && state.selectedPointKeys.length > 0);
+    entryManager.applyVisibleVertices(visibleVertices, false, true);
     ui.setMergeSelectedBlocksEnabled((blockManager?.getSelectedEntries?.().length ?? 0) > 1);
     ui.update({ position: state.currentPosition });
     refreshTextureTools();
@@ -187,26 +185,10 @@ selectionManager = attachSelection({
     undoManager
 });
 
-ui.onClearPointSelection(() => selectionManager.clearPointSelection());
-
 attachMouseBlockControls({
     camera,
     renderer,
     state,
-    blockManager,
-    undoManager,
-    onUpdate: updateUI
-});
-
-const workspaceModeController = createWorkspaceModeController({
-    scene,
-    camera,
-    renderer,
-    controls,
-    state,
-    entryManager,
-    faceController,
-    graphManager,
     blockManager,
     undoManager,
     onUpdate: updateUI
@@ -223,28 +205,53 @@ attachBlockContextMenu({
     onUpdate: updateUI
 });
 
+const modelImporter = createModelImporter({
+    scene,
+    state,
+    entryManager,
+    blockManager,
+    selectionManager,
+    onUpdate: updateUI
+});
+
+const projectIO = createProjectIO({
+    scene,
+    state,
+    ui,
+    entryManager,
+    blockManager,
+    graphManager,
+    faceController,
+    selectionManager,
+    textureManager,
+    onUpdate: updateUI
+});
+
 ui.onControlModeChange((mode) => {
-    state.controlMode = mode;
+    state.controlMode = normalizeControlMode(mode);
     selectionManager.clearSelection();
     state.pathPoints = [state.currentPosition.clone()];
     updateUI();
 });
+state.controlMode = normalizeControlMode(state.controlMode);
 ui.setControlMode(state.controlMode);
-ui.setWorkMode(state.workMode);
 ui.setTextureTargetScope('selection');
 ui.setGeometry(state.currentGeometryType);
-
-ui.onWorkModeToggle((mode) => {
-    selectionManager.clearSelection();
-    workspaceModeController.setMode(mode);
-    ui.setWorkMode(mode);
-    updateUI();
-});
 
 ui.onGeometryChange((type) => {
     state.currentGeometryType = type;
     ui.setGeometry(type);
 });
+
+const runExportGLTF = () => {
+    cleanupManager.removeLinesWithoutFace();
+    exportGLTF(state, blockManager);
+};
+
+const runExportOBJ = () => {
+    cleanupManager.removeLinesWithoutFace();
+    exportOBJ(state, blockManager);
+};
 
 ui.onNativeMenuAction((detail) => {
     switch (detail.action) {
@@ -253,6 +260,9 @@ ui.onNativeMenuAction((detail) => {
                 state.currentGeometryType = detail.value;
                 ui.setGeometry(detail.value);
             }
+            break;
+        case 'save-project':
+            projectIO.saveProject();
             break;
         case 'cleanup-lines':
             cleanupManager.removeLinesWithoutFace();
@@ -263,8 +273,20 @@ ui.onNativeMenuAction((detail) => {
         case 'merge-selected-blocks':
             document.getElementById('merge-selected-blocks-button')?.click();
             break;
+        case 'open-uv-editor':
+            document.getElementById('open-uv-editor-btn')?.click();
+            break;
+        case 'export-gltf':
+            runExportGLTF();
+            break;
+        case 'export-obj':
+            runExportOBJ();
+            break;
         case 'toggle-fps':
             ui.toggleFpsVisibility();
+            break;
+        case 'toggle-editor-help':
+            ui.toggleEditorHelpVisibility();
             break;
     }
 });
@@ -302,15 +324,20 @@ ui.onTextureTargetScopeChange(() => {
     refreshTextureTools();
 });
 
-ui.onExportGLTF(() => {
-    cleanupManager.removeLinesWithoutFace();
-    exportGLTF(state, blockManager);
+ui.onImportModel(async ({ file, format }) => {
+    await modelImporter.importModel({ file, format });
 });
 
-ui.onExportOBJ(() => {
-    cleanupManager.removeLinesWithoutFace();
-    exportOBJ(state, blockManager);
+ui.onSaveProject(() => {
+    projectIO.saveProject();
 });
+
+ui.onImportProject(async ({ file }) => {
+    await projectIO.loadProject(file);
+});
+
+ui.onExportGLTF(runExportGLTF);
+ui.onExportOBJ(runExportOBJ);
 
 function animate(timestamp = 0) {
     requestAnimationFrame(animate);
@@ -318,12 +345,8 @@ function animate(timestamp = 0) {
     if (fps > 0) {
         ui.setFpsValue(fps);
     }
-    if (state.workMode === 'classic') {
-        controls.update();
-    }
-    if (!workspaceModeController.render()) {
-        renderer.render(scene, camera);
-    }
+    controls.update();
+    renderer.render(scene, camera);
 }
 
 updateUI();

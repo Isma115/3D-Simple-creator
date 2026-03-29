@@ -362,6 +362,64 @@ export function createFaceController({
     looseFaceMeshes,
     entryManager
 }) {
+    function restorePlaneFill({ axis, value, cells, mesh = null }) {
+        const planeKey = getPlaneKey(axis, value);
+        const mergedCells = new Set(cells ?? []);
+        const prevData = planeFill.get(planeKey);
+        if (prevData?.mesh) {
+            scene.remove(prevData.mesh);
+        }
+        if (prevData?.gridLines) {
+            scene.remove(prevData.gridLines);
+        }
+
+        const nextMesh = mesh ?? buildPlaneMesh(axis, value, mergedCells, faceMaterial);
+        const nextGridLines = buildPlaneGridLines(axis, value, mergedCells, gridLineMaterial);
+
+        if (nextMesh) scene.add(nextMesh);
+        if (nextGridLines) scene.add(nextGridLines);
+
+        planeFill.set(planeKey, {
+            axis,
+            value,
+            cells: mergedCells,
+            mesh: nextMesh,
+            gridLines: nextGridLines,
+            boundaryVertexKeys: getBoundaryCornerVertexKeys(axis, value, mergedCells)
+        });
+        entryManager.updatePlaneVisibility(planeKey);
+        return planeKey;
+    }
+
+    function restoreLooseFace({ faceKey, faceVertices, mesh = null, points = null, planeKey = '' }) {
+        let resolvedFaceKey = faceKey;
+        let resolvedVertices = Array.isArray(faceVertices) ? [...faceVertices] : null;
+        let resolvedMesh = mesh;
+
+        if (!resolvedMesh && Array.isArray(points)) {
+            const faceData = createFaceMesh(points, faceMaterial);
+            if (!faceData) return null;
+            resolvedMesh = faceData.mesh;
+            resolvedVertices = faceData.facePoints.map((point) => getVertexKey(point));
+            resolvedFaceKey = resolvedFaceKey ?? buildFaceKey(points, planeKey);
+        }
+
+        if (!resolvedMesh || !resolvedFaceKey || !resolvedVertices) {
+            return null;
+        }
+
+        const previousMesh = looseFaceMeshes?.get(resolvedFaceKey);
+        if (previousMesh) {
+            scene.remove(previousMesh);
+        }
+
+        scene.add(resolvedMesh);
+        looseFaceMeshes.set(resolvedFaceKey, resolvedMesh);
+        looseFaceVertices.set(resolvedFaceKey, resolvedVertices);
+        faceRegistry.add(resolvedFaceKey);
+        return resolvedFaceKey;
+    }
+
     function createPlaneFace(points, planeInfo) {
         const planeKey = getPlaneKey(planeInfo.axis, planeInfo.value);
         const polygon2D = projectPointsToPlane(points, planeInfo.axis);
@@ -459,5 +517,9 @@ export function createFaceController({
         return createLooseFace(points, planeKeyHint);
     }
 
-    return { processLoopFace };
+    return {
+        processLoopFace,
+        restorePlaneFill,
+        restoreLooseFace
+    };
 }

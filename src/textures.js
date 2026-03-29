@@ -1,5 +1,13 @@
 import * as THREE from 'three';
 
+const TEXTURE_FILE_EXTENSIONS = [
+    '.png', '.apng', '.jpg', '.jpeg', '.jpe', '.jfif', '.pjpeg', '.pjp',
+    '.webp', '.avif', '.gif', '.bmp', '.dib', '.svg', '.svgz', '.ico', '.cur',
+    '.tif', '.tiff', '.heic', '.heif', '.qoi', '.tga', '.pnm', '.pbm', '.pgm', '.ppm', '.pam'
+];
+const TEXTURE_FILE_ACCEPT = `${TEXTURE_FILE_EXTENSIONS.join(',')},image/*`;
+const TEXTURE_FILE_FORMATS_LABEL = 'PNG, APNG, JPG, JPEG, JPE, JFIF, PJPEG, PJP, WEBP, AVIF, GIF, BMP, DIB, SVG, SVGZ, ICO, CUR, TIF, TIFF, HEIC, HEIF, QOI, TGA, PNM, PBM, PGM, PPM y PAM.';
+
 export function createTextureManager() {
     const textureModal = document.getElementById('texture-modal');
     const uploadInput = document.getElementById('texture-upload-input');
@@ -13,7 +21,7 @@ export function createTextureManager() {
     const quickTextureContent = document.getElementById('quick-texture-content');
     const toggleQuickTexturesBtn = document.getElementById('toggle-quick-textures-btn');
 
-    const textures = []; // Array of { id, url, threeTexture }
+    const textures = []; // Array of { id, name, dataUrl, threeTexture }
     let selectedTextureId = null;
     let onApplyCallback = null;
     let onQuickApplyCallback = null;
@@ -29,7 +37,7 @@ export function createTextureManager() {
             quickTextureContent.style.display = expanded ? 'block' : 'none';
         }
         if (toggleQuickTexturesBtn) {
-            toggleQuickTexturesBtn.textContent = expanded ? 'Ocultar lista' : 'Mostrar lista';
+            toggleQuickTexturesBtn.textContent = expanded ? 'Ocultar' : 'Lista';
         }
     }
 
@@ -37,21 +45,21 @@ export function createTextureManager() {
         if (!quickTextureStatus) return;
 
         if (!quickApplyAvailable) {
-            quickTextureStatus.textContent = 'Selecciona una cara para usar el acceso rapido.';
+            quickTextureStatus.textContent = 'Selecciona una cara para activar este panel.';
             return;
         }
 
         if (textures.length === 0) {
-            quickTextureStatus.textContent = 'Carga una textura desde "Editar UV" y aparecera aqui.';
+            quickTextureStatus.textContent = 'Carga una textura y aparecera aqui.';
             return;
         }
 
         if (selectedTextureId === null) {
-            quickTextureStatus.textContent = 'Selecciona una textura de la lista horizontal.';
+            quickTextureStatus.textContent = 'Elige una textura de la lista.';
             return;
         }
 
-        quickTextureStatus.textContent = 'Pulsa "Aplicar textura" para usarla en la cara seleccionada.';
+        quickTextureStatus.textContent = 'Pulsa "Aplicar" para usarla en la cara seleccionada.';
     }
 
     function updateApplyButtons() {
@@ -64,10 +72,55 @@ export function createTextureManager() {
         updateQuickStatus();
     }
 
+    function loadTexture(dataUrl) {
+        return new Promise((resolve, reject) => {
+            textureLoader.load(
+                dataUrl,
+                (threeTexture) => {
+                    threeTexture.colorSpace = THREE.SRGBColorSpace;
+                    threeTexture.wrapS = THREE.RepeatWrapping;
+                    threeTexture.wrapT = THREE.RepeatWrapping;
+                    resolve(threeTexture);
+                },
+                undefined,
+                reject
+            );
+        });
+    }
+
+    async function addTextureFromData({ id = Date.now().toString(), name = 'Textura', dataUrl, select = true } = {}) {
+        if (!dataUrl) return null;
+        const threeTexture = await loadTexture(dataUrl);
+        const texData = {
+            id,
+            name,
+            dataUrl,
+            threeTexture
+        };
+        textures.push(texData);
+        if (select) {
+            selectedTextureId = texData.id;
+        }
+        renderLists();
+        if (onSelectionChangeCallback) {
+            onSelectionChangeCallback(select ? texData.threeTexture : textures.find((item) => item.id === selectedTextureId)?.threeTexture ?? null);
+        }
+        return texData;
+    }
+
+    async function readFileAsDataUrl(file) {
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error ?? new Error('No se pudo leer la textura.'));
+            reader.readAsDataURL(file);
+        });
+    }
+
     function createTextureItem(tex) {
         const item = document.createElement('div');
         item.className = 'texture-item' + (tex.id === selectedTextureId ? ' selected' : '');
-        item.style.backgroundImage = `url(${tex.url})`;
+        item.style.backgroundImage = `url(${tex.dataUrl})`;
         item.title = tex.name || 'Textura';
 
         item.addEventListener('click', () => {
@@ -118,7 +171,6 @@ export function createTextureManager() {
             if (tex.threeTexture) {
                 tex.threeTexture.dispose();
             }
-            URL.revokeObjectURL(tex.url);
             textures.splice(index, 1);
             if (selectedTextureId === id) {
                 selectedTextureId = null;
@@ -132,41 +184,37 @@ export function createTextureManager() {
 
     function openUploadDialog() {
         if (!uploadInput) return;
+        uploadInput.accept = TEXTURE_FILE_ACCEPT;
         uploadInput.click();
     }
 
     // Bind UI Events
     if (uploadBtn && uploadInput) {
+        uploadBtn.title = `Formatos permitidos: ${TEXTURE_FILE_FORMATS_LABEL}`;
         uploadBtn.addEventListener('click', openUploadDialog);
     }
 
     if (quickUploadBtn && uploadInput) {
+        quickUploadBtn.title = `Formatos permitidos: ${TEXTURE_FILE_FORMATS_LABEL}`;
         quickUploadBtn.addEventListener('click', openUploadDialog);
     }
 
     if (uploadInput) {
-        uploadInput.addEventListener('change', (e) => {
+        uploadInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            const url = URL.createObjectURL(file);
-            textureLoader.load(url, (threeTexture) => {
-                threeTexture.colorSpace = THREE.SRGBColorSpace;
-                threeTexture.wrapS = THREE.RepeatWrapping;
-                threeTexture.wrapT = THREE.RepeatWrapping;
-                
-                const texData = {
-                    id: Date.now().toString(),
+            try {
+                const dataUrl = await readFileAsDataUrl(file);
+                await addTextureFromData({
                     name: file.name,
-                    url,
-                    threeTexture
-                };
-                textures.push(texData);
-                selectedTextureId = texData.id;
-                renderLists();
-                if (onSelectionChangeCallback) onSelectionChangeCallback(texData.threeTexture);
-            });
-            // Reset input so the same file could be loaded again if deleted
+                    dataUrl,
+                    select: true
+                });
+            } catch (error) {
+                console.error('Error al cargar la textura:', error);
+                alert(`No se pudo cargar la textura seleccionada.\n\nPrueba con alguno de estos formatos: ${TEXTURE_FILE_FORMATS_LABEL}`);
+            }
             uploadInput.value = '';
         });
     }
@@ -226,6 +274,33 @@ export function createTextureManager() {
             if (!selectedTextureId) return null;
             const tex = textures.find(t => t.id === selectedTextureId);
             return tex ? tex.threeTexture : null;
+        },
+        getProjectTextures: () => {
+            return textures.map((texture) => ({
+                id: texture.id,
+                name: texture.name,
+                dataUrl: texture.dataUrl,
+                selected: texture.id === selectedTextureId
+            }));
+        },
+        importProjectTextures: async (projectTextures = []) => {
+            while (textures.length > 0) {
+                removeTexture(textures[0].id);
+            }
+
+            for (const texture of projectTextures) {
+                await addTextureFromData({
+                    id: texture.id,
+                    name: texture.name,
+                    dataUrl: texture.dataUrl,
+                    select: Boolean(texture.selected)
+                });
+            }
+
+            if (!projectTextures.some((texture) => texture.selected)) {
+                selectedTextureId = null;
+                renderLists();
+            }
         }
     };
 }

@@ -375,14 +375,26 @@ export function createBlockManager({ scene, state, entryManager }) {
 
     function updateAppearance(entry) {
         if (!entry.mesh.material) return;
-        const material = entry.mesh.material;
         const useActive = entry.hovered || entry.selected;
-        material.color.setHex(useActive ? ACTIVE_COLOR : BASE_COLOR);
-        if (material.emissive) {
-            material.emissive.setHex(useActive ? ACTIVE_EMISSIVE : 0x000000);
-        }
+        const materials = Array.isArray(entry.mesh.material)
+            ? entry.mesh.material
+            : [entry.mesh.material];
+
+        materials.forEach((material, index) => {
+            const baseColor = entry.baseMaterialColors?.[index] ?? BASE_COLOR;
+            if (material?.color?.setHex) {
+                material.color.setHex(
+                    entry.preserveMaterialColors
+                        ? baseColor
+                        : useActive ? ACTIVE_COLOR : BASE_COLOR
+                );
+            }
+            if (material?.emissive?.setHex) {
+                material.emissive.setHex(useActive ? ACTIVE_EMISSIVE : 0x000000);
+            }
+        });
         if (entry.outline?.material) {
-            entry.outline.material.color.setHex(OUTLINE_COLOR);
+            entry.outline.material.color.setHex(useActive ? ACTIVE_COLOR : OUTLINE_COLOR);
             entry.outline.visible = entry.active;
         }
         entry.mesh.visible = entry.active;
@@ -433,7 +445,8 @@ export function createBlockManager({ scene, state, entryManager }) {
         shapeSignature = '',
         vertexMode = 'corners',
         surfaceCount = null,
-        voxelLocalCells = null
+        voxelLocalCells = null,
+        preserveMaterialColors = false
     }) {
         const resolvedGeometryType = geometryType || state.currentGeometryType || 'cube';
         const resolvedDimensions = dimensions?.clone() ?? new THREE.Vector3(size, size, size);
@@ -476,6 +489,10 @@ export function createBlockManager({ scene, state, entryManager }) {
             vertexMode,
             surfaceCount,
             voxelLocalCells: Array.isArray(voxelLocalCells) ? [...voxelLocalCells] : null,
+            preserveMaterialColors,
+            baseMaterialColors: (Array.isArray(resolvedMaterial) ? resolvedMaterial : [resolvedMaterial]).map((item) => (
+                item?.color?.getHex ? item.color.getHex() : null
+            )),
             active: true,
             hovered: false,
             selected: false,
@@ -506,6 +523,10 @@ export function createBlockManager({ scene, state, entryManager }) {
             geometryType,
             dimensions
         });
+    }
+
+    function registerCustomBlockShape(options = {}) {
+        return registerBlockShape(options);
     }
 
     function setHovered(entry, hovered) {
@@ -1636,6 +1657,7 @@ export function createBlockManager({ scene, state, entryManager }) {
     return {
         registerBlock,
         registerBox,
+        registerCustomBlockShape,
         refreshEntryVisibility,
         setHovered,
         setSelected,

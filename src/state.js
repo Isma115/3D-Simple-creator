@@ -96,7 +96,7 @@ export function createState(scene) {
         selectedPointKeys: [],
         hoveredEntry: null,
         workMode: 'classic',
-        controlMode: 'lines',
+        controlMode: 'blocks-keyboard',
         selectedBlock: null,
         selectedBlocks: [],
         hoveredBlock: null,

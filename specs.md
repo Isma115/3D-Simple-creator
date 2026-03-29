@@ -93,14 +93,57 @@
 
 [COMPLETADA] El botón de fusionar bloques o fusionar selección llevalo al mismo botón Edición
 
-[TAREA] El menú de inventario y edición, deben ser menús nativos de las ventanas
+[COMPLETADA] El menú de inventario y edición, deben ser menús nativos de las ventanas
 
-[TAREA] Añadir un texto que muestre los FPS (se podrá ocultar o mostrar en el menú Ver -> Mostrar FPS)
+[COMPLETADA] Añadir un texto que muestre los FPS (se podrá ocultar o mostrar en el menú Ver -> Mostrar FPS)
 
-[TAREA] Eliminar la funcionalidad de poder ver los vértices 
+[COMPLETADA] Eliminar la funcionalidad de poder ver los vértices 
 
-[TAREA] Cambia el aspecto visual de los componentes visuales para que se parezca más a la interfaz de Blender, pero que tampoco sea exactamente igual
+[COMPLETADA] Cambia el aspecto visual de los componentes visuales para que se parezca más a la interfaz de Blender, pero que tampoco sea exactamente igual
 
+[COMPLETADA] La sección de cargar texturas dejala en un pequeño espacio abajo a la izquierda de la interfaz, y simplifica más como se ve
+
+[COMPLETADA] La opción de editar UV muévela al menú Edición
+
+[COMPLETADA] Elimina el modo 4 vistas y toda su funcionalidad
+
+[COMPLETADA] El menú de Exportar muévelo a un menú "Archivo"
+
+[COMPLETADA] Añade opciones en Archivo para cargar un modelo obj o fbx
+
+[COMPLETADA] Por defecto tiene que estar seleccionado el modo colocar bloques con el teclado
+
+[COMPLETADA] Colocar bloques con el click derecho en modo ratón no funciona ya
+
+[COMPLETADA] Simplifica más los textos de instrucciones de control, utilizando menos texto y símbolos para que se vea más limpio
+
+[COMPLETADA] Añade un control para que si pulso Ctrl+D teniendo el ratón sobre algún cubo, quiero que este se divida
+
+[COMPLETADA] Si se tienen varios cubos seleccionados y pulso en "Dividir" o directamente hago Ctrl+d quiero que todos los cubos seleccionados se dividan, lo mismo para cuando pulso en borrar (tecla de retroceso o suprimir), y si se hacen otras funciones con ratón o teclado sobre cubos o figuras que funcione de la misma manera
+
+[COMPLETADA] Al cargar la app la ventana que contiene la aplicación estará en blanco, esto fulmina a la vista, quiero que sea negra en lugar de blanca
+
+[COMPLETADA] Al arrastrar, los bloques o figuras seleccionadas no se deben deseleccionar, solamente al pulsar click izquierdo en cualquier sitio, que si que se deseleccionen
+
+[COMPLETADA] El atajo de Ctrl+d debe aplicarse al bloque el cual el mouse está posado encima en lugar del bloque seleccionado con click izquierdo
+
+[COMPLETADA] Funcionalidad para guardar o cargar un modelo 3D el cual se está editando, para poder retomar el trabajo más tarde
+
+[COMPLETADA] Elimina el botón de deseleccionar puntos, quiero que esta función se ejecute automáticamente al momento de hacer click izquierdo en cualquier parte de la app (la función de arrastrar no debe deseleccionar los puntos)
+
+[COMPLETADA] Parece que no todos los tipos de archivos de imagen son permitidos para importar, lista todos los posibles formatos de imagen y haz que se pueda importar texturas de cualquier formato de imagen
+
+[COMPLETADA] Elimina el tipo de control "Puntos"
+
+[COMPLETADA] El formato que utiliza blender para mostrar las instrucciones de uso de la app incluye imágenes para mostrar cada control, quiero que hagas lo mismo, que muestres imágenes de los controles en lugar de texto, o si no puedes crear iconos svg o imágenes pues utiliza emojis
+
+[COMPLETADA] Reordena los menús superiores, el primero que tiene que aparecer es Archivo, al lado del de Editar
+
+[COMPLETADA] Simplifica más la interfaz gráfica pero que tampoco sea demasiado simple, bordes cuadrados en lugar de redondeados
+
+[COMPLETADA] La opción de Mostrar u ocultar ayuda no funciona
+
+[TAREA] Añade un tipo de control que permita seleccionar caras individuales de cada cubo, cuando esta opción esté seleccionada se van a desplegar dentro de ese radiobutton un parámetro (caras vecinas) que va a permitir al momento de pulsar sobre una cara del cubo, se van a seleccionar automáticamente la n caras vecinas que estén en contacto con la cara seleccionada.
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 

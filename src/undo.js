@@ -25,6 +25,13 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         return entries;
     }
 
+    function getParentBlockEntries(action) {
+        const entries = [];
+        if (action.parentEntry) entries.push(action.parentEntry);
+        if (action.parentEntries) entries.push(...action.parentEntries);
+        return entries;
+    }
+
     function getEdges(action) {
         const edges = [];
         if (action.edge) edges.push(action.edge);
@@ -161,6 +168,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         const lineEntries = getLineEntries(action);
         const pointEntries = getPointEntries(action);
         const blockEntries = getBlockEntries(action);
+        const parentBlockEntries = getParentBlockEntries(action);
         const edges = getEdges(action);
 
         applyEntries(lineEntries, isDelete);
@@ -178,7 +186,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         }
         if (isBlockSplit && blockManager) {
             applyBlocks(action.childEntries ?? [], false);
-            applyBlocks(action.parentEntry ? [action.parentEntry] : [], true);
+            applyBlocks(parentBlockEntries, true);
         }
         if (action.kind === 'block-move' && blockManager) {
             blockManager.updateBlockPosition(action.entry, action.positionBefore);
@@ -223,6 +231,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         const lineEntries = getLineEntries(action);
         const pointEntries = getPointEntries(action);
         const blockEntries = getBlockEntries(action);
+        const parentBlockEntries = getParentBlockEntries(action);
         const edges = getEdges(action);
 
         applyEntries(lineEntries, !isDelete);
@@ -239,7 +248,7 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
             applyBlocks(action.createdEntries ?? [], true);
         }
         if (isBlockSplit && blockManager) {
-            applyBlocks(action.parentEntry ? [action.parentEntry] : [], false);
+            applyBlocks(parentBlockEntries, false);
             applyBlocks(action.childEntries ?? [], true);
         }
         if (action.kind === 'block-move' && blockManager) {

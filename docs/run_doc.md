@@ -1,17 +1,19 @@
 # Documentación del Script de Ejecución (`run.py`)
 
 ## Explicación Sencilla (No Técnica)
-Este archivo sirve para abrir la aplicación como una ventana de escritorio. Primero enciende un pequeño servidor interno solo para que la app pueda cargar sus archivos, y después abre una ventana propia del programa para que no dependas del navegador. En esa ventana, los menús `Inventario`, `Edicion` y `Ver` pasan a ser menús nativos del sistema. Si por cualquier motivo ese modo de escritorio no estuviera disponible, puede seguir abriendo la app en el navegador como plan de respaldo.
+Este archivo abre la aplicación como programa de escritorio. Levanta un pequeño servidor local, abre la ventana de la app y la cierra por completo cuando cierras esa ventana. Además crea los menús nativos del sistema para no depender de una barra HTML.
 
 ## Explicación Técnica
-El script está escrito en Python y combina librerías estándar con `pywebview` cuando está disponible para envolver la aplicación web en una ventana nativa.
+`run.py` combina un servidor HTTP mínimo con `pywebview` cuando está disponible.
 
-- **Búsqueda Dinámica de Puertos (`find_free_port`)**: Utiliza el módulo `socket` para enlazar temporalmente un socket al puerto `0`, lo que le pide al Sistema Operativo que asigne el primer puerto libre disponible. Esto previene colisiones.
-- **Servidor HTTP con Handler Personalizado (`CustomHandler`)**: Hereda de `SimpleHTTPRequestHandler` para interceptar llamadas al endpoint `/heartbeat` (GET) y `/shutdown` (POST), y responde apropiadamente. También silencia los logs de los *heartbeats* en `stdout` para no desordenar la consola.
-- **Sistema de Monitorización (*Heartbeats*)**: Un hilo extra ejecuta `monitor_heartbeat`, el cual revisa cíclicamente si han pasado más de una cantidad definida de segundos (`TIMEOUT_SECONDS = 5`) desde el último latido recibido. Si se excede, el script deduce que la pestaña se cerró o perdió conexión, apagando el servidor automáticamente mediante `httpd.shutdown()`. 
-- **Beacon de Desconexión Rápida (`/shutdown`)**: Como medida de apagado instantáneo, la página web envía `navigator.sendBeacon('/shutdown')` con el evento `beforeunload`, permitiendo cerrar el servidor al segundo de presionar la "X" en vez de esperar el _timeout_ de inactividad.
-- **Ventana de Escritorio con `pywebview`**: Si `pywebview` está instalado, `run.py` crea una ventana nativa apuntando a `http://localhost:<puerto>` y registra el evento de cierre para apagar el servidor en cuanto el usuario cierra la aplicación.
-- **Menús Nativos de Ventana**: Construye menús nativos con `webview.menu.Menu` y `MenuAction` para inventario, edición y vista. Sus acciones envían eventos al frontend mediante `window.evaluate_js(...)`, de forma que la lógica sigue viviendo en JavaScript pero la interacción se hace desde el menú del sistema.
-- **Servidor en segundo plano**: En vez de bloquear el hilo principal con `serve_forever()`, el servidor HTTP vive en un hilo `daemon`, permitiendo que el hilo principal quede libre para el bucle gráfico de la ventana de escritorio.
-- **Apagado unificado (`request_shutdown`)**: El cierre por heartbeat, por cierre manual de la ventana o por excepción converge en la misma función protegida con `Lock`, evitando dobles llamadas a `shutdown()`.
-- **Plan de respaldo en navegador**: Si `pywebview` no está disponible, el script conserva el comportamiento anterior y abre el navegador con `webbrowser.open(...)`.
+Puntos clave:
+- Busca un puerto libre automáticamente para evitar conflictos.
+- Sirve los archivos del proyecto con `SimpleHTTPRequestHandler`.
+- Mantiene un sistema de heartbeat para apagar el servidor si la app deja de responder o se cierra.
+- Cuando `pywebview` está disponible, abre la URL local dentro de una ventana nativa y fuerza un fondo negro desde el primer fotograma para evitar el destello blanco inicial.
+- Construye menús nativos de `Archivo`, `Edición`, `Inventario` y `Ver`.
+- Los menús envían eventos personalizados al frontend usando `window.evaluate_js(...)`, así que la lógica real sigue centralizada en JavaScript.
+- `Archivo` expone guardar proyecto, cargar proyecto, cargar `OBJ`, cargar `FBX`, exportar `GLB` y exportar `OBJ`.
+- `Edición` agrupa limpiar líneas, fusionar bloques, fusionar selección y abrir `Editar UV`.
+
+Si `pywebview` no existe, conserva un modo de respaldo en navegador.
