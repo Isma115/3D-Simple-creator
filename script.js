@@ -127,7 +127,7 @@ ui.onMergeSelectedBlocks(() => {
         return;
     }
 
-    const result = blockManager.mergeEntriesIntoComposite(selectedEntries);
+    const result = blockManager.mergeAllEntriesIntoComposite(selectedEntries);
     if (!result.changed) {
         const hasUnsupportedEntries = (result.rejectedEntries?.length ?? 0) > 0;
         alert(
@@ -154,7 +154,7 @@ ui.onMergeSelectedBlocks(() => {
     });
     updateUI();
 
-    alert(`Fusion completada: ${selectedEntries.length} figuras seleccionadas -> ${result.resultingEntries.length} figuras.`);
+    alert(`Fusion completada: ${result.beforeCount} figuras seleccionadas -> ${result.afterCount} figuras.`);
 });
 
 const originKey = ensureVertex(state.vertexPositions, state.originPoint.position);
@@ -300,6 +300,11 @@ textureManager.onQuickApply((texture) => {
     refreshTextureTools();
 });
 textureManager.onSelectionChange(() => {
+    refreshTextureTools();
+});
+textureManager.onTransformChange((texture) => {
+    if (!texture) return;
+    selectionManager?.updateTextureTransform?.(getCurrentTextureScope(), texture);
     refreshTextureTools();
 });
 

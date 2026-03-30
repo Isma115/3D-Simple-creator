@@ -10,6 +10,7 @@ Su responsabilidad es:
 - Recoger el estado editable de la escena y convertirlo en un JSON de proyecto `.s3dc`.
 - Guardar bloques, caras de plano, caras libres, líneas, puntos relevantes, texturas cargadas y parte del estado de sesión.
 - Serializar geometrías, materiales y mapas de textura cuando hace falta, incluyendo UV editadas.
+- Restaurar al cargar tanto las texturas aplicadas a la geometría como la biblioteca de texturas que el usuario había dejado cargada en el panel.
 - Reutilizar el diálogo nativo de escritorio cuando `pywebview` está disponible, o la descarga del navegador en modo web.
 - Vaciar el modelo actual antes de cargar uno guardado, usando el mismo limpiado base que ya usaba la importación.
 - Reconstruir la escena llamando a los managers existentes (`blockManager`, `faceController`, `entryManager`, `graphManager`, `textureManager`) para que el resultado siga siendo editable y no quede como una malla pasiva.

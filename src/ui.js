@@ -1,6 +1,7 @@
 export function createUI() {
     const urlParams = new URLSearchParams(window.location.search);
     const hasNativeMenus = urlParams.get('nativeMenus') === '1';
+    const uiOverlay = document.getElementById('ui-overlay');
     const coordsDisplay = document.getElementById('coordinates-display');
     const geometryDisplay = document.getElementById('active-geometry-display');
     const fpsPanel = document.getElementById('fps-panel');
@@ -26,7 +27,6 @@ export function createUI() {
     const editorHelpModeShortcuts = document.getElementById('editor-help-mode-shortcuts');
     const faceNeighborControls = document.getElementById('face-neighbor-controls');
     const faceNeighborDepthInput = document.getElementById('face-neighbor-depth-input');
-    const faceNeighborDepthValue = document.getElementById('face-neighbor-depth-value');
     const geometryInputs = Array.from(document.querySelectorAll('input[name="geometry-type"]'));
     const geometryInventory = document.getElementById('geometry-inventory');
     const saveProjectButton = document.getElementById('save-project-button');
@@ -63,29 +63,29 @@ export function createUI() {
     };
     const controlModeHelp = {
         lines: [
-            { icon: 'LMB', keys: 'Click', label: 'Trazar' },
-            { icon: 'SHF', keys: 'Mayus + click', label: 'Sumar' },
-            { icon: 'RMB', keys: 'Click der.', label: 'Unir' }
+            'Click: trazar',
+            'Shift + click: sumar',
+            'Click der.: unir'
         ],
         'blocks-keyboard': [
-            { icon: 'WASD', keys: 'WASD', label: 'Cursor' },
-            { icon: 'ARW', keys: 'Flechas', label: 'Construir' },
-            { icon: 'CTRL', keys: 'Ctrl + D', label: 'Dividir' }
+            'WASD: mover cursor',
+            'Flechas: construir',
+            'Ctrl + D: dividir'
         ],
         'blocks-mouse': [
-            { icon: 'RMB', keys: 'Click der.', label: 'Colocar' },
-            { icon: 'LMB', keys: 'Click izq.', label: 'Borrar' },
-            { icon: 'CTRL', keys: 'Ctrl + D', label: 'Dividir' }
+            'Click der.: colocar',
+            'Click izq.: borrar',
+            'Ctrl + D: dividir'
         ],
         'select-face': [
-            { icon: 'LMB', keys: 'Click', label: 'Elegir' },
-            { icon: 'TEX', keys: 'Aplicar', label: 'Textura' },
-            { icon: 'UV', keys: 'UV', label: 'Editar' }
+            'Click: elegir',
+            'Shift + click: sumar',
+            'Aplicar: textura'
         ],
         'select-face-neighbors': [
-            { icon: 'LMB', keys: 'Click', label: 'Base' },
-            { icon: 'N', keys: 'Deslizador', label: 'Vecinas' },
-            { icon: 'TEX', keys: 'Aplicar', label: 'Textura' }
+            'Click: cara base',
+            'Caja: vecinas',
+            'Aplicar: textura'
         ]
     };
 
@@ -122,6 +122,7 @@ export function createUI() {
     }
 
     function update({ position }) {
+        if (!coordsDisplay || !position) return;
         coordsDisplay.textContent = `X: ${position.x.toFixed(1)}, Y: ${position.y.toFixed(1)}, Z: ${position.z.toFixed(1)}`;
     }
 
@@ -224,7 +225,9 @@ export function createUI() {
         controlModeChangeHandler = handler;
         for (const input of controlModeInputs) {
             input.addEventListener('change', () => {
-                if (input.checked) handler(input.value);
+                if (!input.checked) return;
+                setControlMode(input.value);
+                handler(input.value);
             });
         }
     }
@@ -265,6 +268,7 @@ export function createUI() {
         const nextInput = controlModeInputs[nextIndex];
         if (!nextInput) return;
         nextInput.checked = true;
+        setControlMode(nextInput.value);
         controlModeChangeHandler(nextInput.value);
         showControlModeToast(nextInput.value);
     }
@@ -302,11 +306,7 @@ export function createUI() {
         if (editorHelpModeShortcuts) {
             const shortcuts = controlModeHelp[value] ?? [];
             editorHelpModeShortcuts.innerHTML = shortcuts.map((shortcut) => `
-                <div class="help-shortcut-card">
-                    <span class="help-shortcut-icon" aria-hidden="true">${shortcut.icon}</span>
-                    <span class="help-shortcut-keys">${shortcut.keys}</span>
-                    <span class="help-shortcut-label">${shortcut.label}</span>
-                </div>
+                <div class="help-line">${shortcut}</div>
             `).join('');
         }
     }
@@ -353,6 +353,10 @@ export function createUI() {
 
     function setFpsVisibility(visible) {
         fpsVisible = visible;
+        if (uiOverlay) {
+            uiOverlay.hidden = !visible;
+            uiOverlay.style.display = visible ? 'flex' : 'none';
+        }
         if (fpsPanel) {
             fpsPanel.hidden = !visible;
         }
@@ -421,12 +425,13 @@ export function createUI() {
         }
     }
 
-    if (faceNeighborDepthInput && faceNeighborDepthValue) {
-        const syncFaceNeighborDepth = () => {
-            faceNeighborDepthValue.textContent = faceNeighborDepthInput.value;
-        };
-        faceNeighborDepthInput.addEventListener('input', syncFaceNeighborDepth);
-        syncFaceNeighborDepth();
+    if (faceNeighborDepthInput) {
+        faceNeighborDepthInput.addEventListener('input', () => {
+            const parsed = Number.parseInt(faceNeighborDepthInput.value, 10);
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                faceNeighborDepthInput.value = '0';
+            }
+        });
     }
 
     if (toggleEditorHelpButton) {
@@ -483,7 +488,7 @@ export function createUI() {
     });
 
     window.addEventListener('wheel', (event) => {
-        if (!event.metaKey) return;
+        if (!event.ctrlKey || event.altKey || event.metaKey) return;
         if (isTextureManagerVisible()) return;
         if (controlModeInputs.length === 0 || !controlModeChangeHandler) return;
 

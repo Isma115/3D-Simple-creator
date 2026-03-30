@@ -1,5 +1,4 @@
-1. Debo escribir un pequeño resumen en lenguaje no técnico de cada funcionalidad en un fichero md
-2. No debo marcar tareas como COMPLETADA de forma autónoma, solo el usuario podrá hacer esto
+No debo marcar tareas como COMPLETADA de forma autónoma, solo el usuario podrá hacer esto
 
 [COMPLETADA] Crear una aplicacion web que permita crear modelos 3D simples utilizando las flechas del teclado lo cual hará crear puntos uno tras de otro y según dónde mire la cámara cambiarán los controles con las flechas, cuando pulso una flecha del teclado se dibuja una línea desde el último punto hasta el nuevo punto y así con las otras teclas de forma intuitiva y dependiendo de la orientación del modelo las flechas cambiarán
 
@@ -143,7 +142,47 @@
 
 [COMPLETADA] La opción de Mostrar u ocultar ayuda no funciona
 
-[TAREA] Añade un tipo de control que permita seleccionar caras individuales de cada cubo, cuando esta opción esté seleccionada se van a desplegar dentro de ese radiobutton un parámetro (caras vecinas) que va a permitir al momento de pulsar sobre una cara del cubo, se van a seleccionar automáticamente la n caras vecinas que estén en contacto con la cara seleccionada.
+[COMPLETADA] Añade un tipo de control que permita seleccionar caras individuales de cada cubo, cuando esta opción esté seleccionada se van a desplegar dentro de ese radiobutton un parámetro (caras vecinas) que va a permitir al momento de pulsar sobre una cara del cubo, se van a seleccionar automáticamente la n caras vecinas que estén en contacto con la cara seleccionada.
+
+[COMPLETADA] El control de selección de caras individuales tiene que permitir seleccionar varias caras a la vez manteniendo pulsado el shift
+
+[COMPLETADA] Simplifica aún más el como se muestran las instrucciones solo con puro texto plano ocupando menos espacio
+
+[COMPLETADA] La lista de texturas cargadas por defecto tiene que estar mostrando las texturas
+
+[COMPLETADA] Que la combinación para cambiar el tipo de control utilice la tecla Ctrl + rueda, en lugar del control que hay ahora
+
+[COMPLETADA] En la sección de texturas quiero un slider que permita desplazar la textura y como se dibuja en las caras en las cuales se ha decidido dibujar
+
+[COMPLETADA] Fusionar selección teniendo varios bloques seleccionados no permite fusionar los bloques, corrige este error
+
+[COMPLETADA] Al pular click derecho al tener seleccionados varios bloques permite que se puedan fusionar con una nueva opción "Fusionar selección" en la ventana flotante
+
+[COMPLETADA] Al guardar el modelo 3D el cual se está editando (Modo guardar trabajo) quiero que también se guarden las texturas cargadas y que se vuelven a cargar automáticamente al momento de volver a abrir el proyecto
+
+[COMPLETADA] Al momento de iniciar la app quiero que se inicie en modo ventana pero que ocupe toda la pantalla disponible
+
+[COMPLETADA] En la sección de información deja solamente el contador de FPS en caso de que este esté activado
+
+[COMPLETADA] La lista de texturas cargadas solo puede estar abierta, no debe poder ocultarse
+
+[COMPLETADA] Añade un nuevo control a los bloques o figuras que sea redimensionar, que permita cambiar el control de mover el bloque o figura para que pase a -> redimensionar y que haciendo lo mismo que la función de mover permita ampliar o reducir el tamaño del bloque o figura
+
+[COMPLETADA] Añade un espacio por defecto al cargador de texturas para eliminar la textura y dejar la textura por defecto de la figura o cubo
+
+[COMPLETADA] La funcionalidad de caras vecinas no recoge solamente una cara de la figura, sino que si por ejemplo tengo un bloque conjunto (fusionado), va a seleccionar todas sus caras, quiero que solo seleccione la cara en la que se ha pulsado
+
+[TAREA] Construye un programa dentro de este mismo directorio (VisorModelos) que permita visualizar modelos de cualquier formato obj, fbx, glb, etc. que tenga una interfaz sencilla y limpia, con un botón para cargar el modelo.
+
+[TAREA] Al momento de tener seleccionada alguna figura o cara, etc, no se puede deseleccionar cuando arrastro por la pantalla, solamente al pulsar click izquierdo en cualquier sitio ya si se deseleccionará.
+
+
+
+
+
+[TAREA] La función de redimensionar tiene que activar en la figura seleccionada la misma función que la de mover, pero en lugar de flechas en cada eje serán cubitos (como en blender cuando se quiere redimensionar un bloque) y puedes tirar sobre cada uno de los ejes para amplair la figura, y también tiene que haber un cubito en el centro que permita ampliar o reducir el tamaño de la figura en todos los ejes a la vez.
+
+
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 

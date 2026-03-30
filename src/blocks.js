@@ -427,12 +427,21 @@ export function createBlockManager({ scene, state, entryManager }) {
         return blockEntries.some((entry) => entry.active && entry !== excludedEntry && isPointInsideBlock(point, entry));
     }
 
-    function applyMeshScale(mesh, geometryType, dimensions, size) {
-        if (geometryType === 'cube') {
-            mesh.scale.copy(dimensions);
-            return;
+    function getGeometryDimensions(geometry) {
+        const bounds = geometry?.boundingBox?.clone?.() ?? null;
+        if (!bounds) {
+            geometry?.computeBoundingBox?.();
         }
-        mesh.scale.setScalar(size);
+        return geometry?.boundingBox?.getSize?.(new THREE.Vector3()) ?? new THREE.Vector3(1, 1, 1);
+    }
+
+    function applyMeshScale(mesh, dimensions) {
+        const baseDimensions = getGeometryDimensions(mesh.geometry);
+        mesh.scale.set(
+            baseDimensions.x > BLOCK_EPSILON ? dimensions.x / baseDimensions.x : 1,
+            baseDimensions.y > BLOCK_EPSILON ? dimensions.y / baseDimensions.y : 1,
+            baseDimensions.z > BLOCK_EPSILON ? dimensions.z / baseDimensions.z : 1
+        );
     }
 
     function registerBlockShape({
@@ -470,11 +479,7 @@ export function createBlockManager({ scene, state, entryManager }) {
         const outline = createBlockOutline(resolvedGeometry);
         mesh.add(outline);
         mesh.position.copy(position);
-        if (geometry) {
-            mesh.scale.set(1, 1, 1);
-        } else {
-            applyMeshScale(mesh, resolvedGeometryType, resolvedDimensions, size);
-        }
+        applyMeshScale(mesh, resolvedDimensions);
         mesh.renderOrder = 1;
 
         const entry = {
@@ -725,6 +730,44 @@ export function createBlockManager({ scene, state, entryManager }) {
 
         entry.position.copy(newPosition);
         entry.mesh.position.copy(newPosition);
+        entry.key = getBlockKey(
+            entry.position,
+            entry.size,
+            entry.geometryType,
+            getBlockDimensions(entry),
+            entry.shapeSignature ?? ''
+        );
+
+        blockEntriesByKey.set(entry.key, entry);
+
+        if (wasActive) {
+            entry.active = true;
+            refreshEntryVisibility(entry);
+        }
+    }
+
+    function updateBlockDimensions(entry, newDimensions, newSize = null) {
+        if (!entry || !newDimensions) return;
+
+        const wasActive = entry.active;
+        if (wasActive) {
+            entry.active = false;
+            refreshEntryVisibility(entry);
+        }
+
+        blockEntriesByKey.delete(entry.key);
+
+        entry.dimensions = newDimensions.clone();
+        if (Number.isFinite(newSize) && newSize > BLOCK_EPSILON) {
+            entry.size = newSize;
+        } else if (
+            Math.abs(newDimensions.x - newDimensions.y) <= BLOCK_EPSILON
+            && Math.abs(newDimensions.x - newDimensions.z) <= BLOCK_EPSILON
+        ) {
+            entry.size = newDimensions.x;
+        }
+
+        applyMeshScale(entry.mesh, entry.dimensions);
         entry.key = getBlockKey(
             entry.position,
             entry.size,
@@ -1677,6 +1720,7 @@ export function createBlockManager({ scene, state, entryManager }) {
         mergeAllEntriesIntoComposite,
         optimizeBlocks,
         updateBlockPosition,
+        updateBlockDimensions,
         isPositionOccupied
     };
 }

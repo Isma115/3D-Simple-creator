@@ -13,8 +13,8 @@ El módulo `export.js` se encarga de aislar la geometría creada por el usuario 
 
 La limpieza de líneas sin cara se dispara desde `script.js` justo antes de llamar a `exportGLTF(...)` o `exportOBJ(...)`, reutilizando el mismo `cleanupManager` que existe para la acción manual de edición. Así el archivo exportado no conserva segmentos auxiliares aunque el usuario no haya pulsado antes la limpieza manual.
 
-Antes de exportar los bloques:
-- elimina los hijos `Line` / `LineSegments` para que la malla blanca de contorno no termine dentro del archivo exportado.
+Antes de exportar las mallas:
+- elimina los hijos `Line` / `LineSegments` para que la malla blanca de contorno de bloques y caras no termine dentro del archivo exportado.
 - detecta cubos simples adyacentes con el mismo tamaño y material base y reconstruye su piel exterior exacta, fusionando caras coplanares visibles y eliminando las internas sin cambiar la forma real del modelo.
 - deja fuera de esa fusion automatica a los prismas rectangulares ya compactados en el editor, exportandolos tal cual con su escala real para no deformar la geometria.
 - indexa la geometria resultante para reutilizar vertices equivalentes en vez de duplicarlos por cada triangulo.

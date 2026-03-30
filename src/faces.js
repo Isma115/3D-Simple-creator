@@ -2,6 +2,43 @@ import * as THREE from 'three';
 import { FACE_EPSILON } from './constants.js';
 import { pointsEqual, projectPointsToPlane, getPlaneKey, getAxisAlignedPlane, buildFaceKey, getVertexKey } from './geometry.js';
 
+const FACE_OUTLINE_COLOR = 0xffffff;
+
+function createFaceOutline(geometry) {
+    if (!geometry) return null;
+    const edges = new THREE.EdgesGeometry(geometry);
+    const outline = new THREE.LineSegments(
+        edges,
+        new THREE.LineBasicMaterial({
+            color: FACE_OUTLINE_COLOR,
+            transparent: true,
+            opacity: 0.96,
+            depthWrite: false
+        })
+    );
+    outline.renderOrder = 3;
+    outline.scale.setScalar(1.001);
+    outline.userData.isFaceOutline = true;
+    return outline;
+}
+
+function attachFaceOutline(mesh) {
+    if (!mesh?.geometry) return mesh;
+
+    const previousOutline = mesh.children?.find?.((child) => child.userData?.isFaceOutline);
+    if (previousOutline) {
+        mesh.remove(previousOutline);
+        previousOutline.geometry?.dispose?.();
+        previousOutline.material?.dispose?.();
+    }
+
+    const outline = createFaceOutline(mesh.geometry);
+    if (outline) {
+        mesh.add(outline);
+    }
+    return mesh;
+}
+
 function removeCollinear2D(points) {
     if (points.length <= 3) return points;
     const result = [];
@@ -175,7 +212,7 @@ function buildPlaneMesh(axis, value, cells, faceMaterial) {
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
 
-    return new THREE.Mesh(geometry, faceMaterial);
+    return attachFaceOutline(new THREE.Mesh(geometry, faceMaterial));
 }
 
 function buildPlaneGridLines(axis, value, cells, gridLineMaterial) {
@@ -349,7 +386,7 @@ function createFaceMesh(points, faceMaterial) {
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
 
-    return { mesh: new THREE.Mesh(geometry, faceMaterial), facePoints };
+    return { mesh: attachFaceOutline(new THREE.Mesh(geometry, faceMaterial)), facePoints };
 }
 
 export function createFaceController({
@@ -373,7 +410,7 @@ export function createFaceController({
             scene.remove(prevData.gridLines);
         }
 
-        const nextMesh = mesh ?? buildPlaneMesh(axis, value, mergedCells, faceMaterial);
+        const nextMesh = mesh ? attachFaceOutline(mesh) : buildPlaneMesh(axis, value, mergedCells, faceMaterial);
         const nextGridLines = buildPlaneGridLines(axis, value, mergedCells, gridLineMaterial);
 
         if (nextMesh) scene.add(nextMesh);
@@ -413,6 +450,7 @@ export function createFaceController({
             scene.remove(previousMesh);
         }
 
+        attachFaceOutline(resolvedMesh);
         scene.add(resolvedMesh);
         looseFaceMeshes.set(resolvedFaceKey, resolvedMesh);
         looseFaceVertices.set(resolvedFaceKey, resolvedVertices);

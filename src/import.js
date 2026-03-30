@@ -109,14 +109,30 @@ export function clearCurrentModel({
 
     for (const planeData of state.planeFill.values()) {
         if (planeData.mesh) {
+            planeData.mesh.children?.forEach((child) => {
+                child.geometry?.dispose?.();
+                child.material?.dispose?.();
+            });
             scene.remove(planeData.mesh);
+            planeData.mesh.geometry?.dispose?.();
+            if (Array.isArray(planeData.mesh.material)) {
+                planeData.mesh.material.forEach((material) => material?.dispose?.());
+            } else {
+                planeData.mesh.material?.dispose?.();
+            }
         }
         if (planeData.gridLines) {
             scene.remove(planeData.gridLines);
+            planeData.gridLines.geometry?.dispose?.();
+            planeData.gridLines.material?.dispose?.();
         }
     }
 
     for (const mesh of state.looseFaceMeshes.values()) {
+        mesh.children?.forEach((child) => {
+            child.geometry?.dispose?.();
+            child.material?.dispose?.();
+        });
         scene.remove(mesh);
         mesh.geometry?.dispose?.();
         if (Array.isArray(mesh.material)) {

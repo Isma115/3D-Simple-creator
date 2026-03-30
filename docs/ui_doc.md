@@ -5,10 +5,11 @@ Esta es la parte visible de la aplicación. Ahora la interfaz está más limpia 
 - Un menú `Archivo` para cargar modelos `OBJ` o `FBX` y para exportar el trabajo.
 - Un menú `Edición` para limpiar líneas sueltas, fusionar bloques y abrir `Editar UV`.
 - Un menú `Inventario` para elegir qué figura se va a colocar.
-- Un panel pequeño arriba a la izquierda con la posición actual, la figura activa y los FPS cuando están visibles.
-- Un panel de control para cambiar entre líneas, bloques con teclado, bloques con ratón y selección de cara.
-- Un bloque de ayuda visual compacto con etiquetas cortas como `LMB`, `RMB` o `CMD` para recordar los controles sin llenar la pantalla de texto.
-- Una pequeña sección de texturas abajo a la izquierda, más compacta, con acceso rápido a cargar, elegir y aplicar una textura.
+- Un panel pequeño arriba a la izquierda que solo aparece para mostrar los FPS cuando están visibles.
+- Un panel de control para cambiar entre líneas, bloques con teclado, bloques con ratón, selección de cara y un modo de caras vecinas.
+- En el modo `Caras vecinas` aparece una caja numérica dentro del propio bloque para indicar cuántos cubos vecinos del mismo plano se suman automáticamente, incluyendo diagonales.
+- Un bloque de ayuda aún más pequeño, solo con líneas de texto plano.
+- Una pequeña sección de texturas abajo a la izquierda, más compacta, con acceso rápido a cargar, elegir, quitar, desplazar y aplicar una textura. Esa lista ya no se puede ocultar.
 - Una ventana modal de `Editar UV` para recolocar la textura sobre la malla del modelo.
 
 ## Explicación Técnica
@@ -16,9 +17,12 @@ Esta es la parte visible de la aplicación. Ahora la interfaz está más limpia 
 
 La estructura visual se divide en:
 - `#ui-stack`: bloque superior izquierdo con estado y controles frecuentes.
+- `#ui-overlay`: caja mínima reservada solo al contador de FPS, oculta por defecto hasta que el usuario activa esa opción.
+- `#face-neighbor-controls`: subpanel compacto que solo aparece cuando el radiobutton `Caras vecinas` está activo y deja fijar con una caja numérica el radio de cubos vecinos.
 - `#bottom-left-tools`: contenedor fijo para la ayuda visual y el panel rápido de texturas, separado del resto para no cargar la columna principal.
 - `#texture-modal`: ventana modal para el gestor UV y la lista completa de texturas.
 - `#model-import-input`: input oculto reutilizado para seleccionar archivos `.obj` o `.fbx`.
 - `#texture-upload-input`: input oculto configurado con una lista amplia de extensiones de imagen (`PNG`, `JPG`, `WEBP`, `AVIF`, `GIF`, `BMP`, `SVG`, `TIFF`, `HEIC`, `TGA`, `PNM` y variantes comunes) además de `image/*`.
+- `#quick-texture-transform`: subpanel compacto del acceso rápido con sliders para desplazar la textura seleccionada en `U` y `V`.
 
-`style.css` mantiene una estética cercana a un software de modelado: superficies gris oscuro, acentos naranjas y sombras suaves. La simplificación reciente elimina aún más ruido visual, usa bordes rectos en paneles y botones y compacta la ayuda en tarjetas pequeñas con códigos de entrada breves.
+`style.css` mantiene una estética cercana a un software de modelado: superficies gris oscuro, acentos naranjas y sombras suaves. La simplificación reciente elimina aún más ruido visual, usa bordes rectos en paneles y botones, reduce la ayuda a líneas de texto plano, deja la lista rápida de texturas siempre visible y convierte la zona superior en una caja mínima dedicada solo a FPS.

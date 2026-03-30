@@ -11,6 +11,22 @@ function getSelectedFaces(state) {
     return Array.isArray(state.selectedFace) ? state.selectedFace : [state.selectedFace];
 }
 
+function mergeUniqueFaces(...faceGroups) {
+    const merged = [];
+    const seen = new Set();
+
+    for (const group of faceGroups) {
+        for (const face of group ?? []) {
+            const identity = getFaceIdentity(face);
+            if (!identity || seen.has(identity)) continue;
+            seen.add(identity);
+            merged.push(face);
+        }
+    }
+
+    return merged;
+}
+
 function getBlockMaterialIndex(face) {
     if (typeof face?.faceIndex !== 'number') return 0;
     return Math.floor(face.faceIndex / 2);
@@ -62,6 +78,9 @@ function getFaceIdentity(face) {
     if (face.data?.type === 'block' && !shouldTreatFaceAsWholeMesh(face)) {
         return `block:${face.mesh.uuid}:${getBlockMaterialIndex(face)}`;
     }
+    if (face.data?.type === 'merged-block' && typeof face.faceIndex === 'number') {
+        return `merged-block:${face.mesh.uuid}:${Math.floor(face.faceIndex / 2)}`;
+    }
     return `mesh:${face.mesh.uuid}`;
 }
 
@@ -69,6 +88,9 @@ function getFaceTriangles(face) {
     if (!face?.mesh) return [];
     if (face.data?.type === 'block' && !shouldTreatFaceAsWholeMesh(face)) {
         return getBlockFaceTriangles(face.mesh, face.faceIndex);
+    }
+    if (face.data?.type === 'merged-block' && typeof face.faceIndex === 'number') {
+        return getMergedBlockFaceTriangles(face.mesh, face.faceIndex);
     }
     return getAllTriangles(face.mesh);
 }
@@ -185,6 +207,23 @@ function getBlockFaceTriangles(mesh, faceIndex) {
     const start = getBlockMaterialIndex({ faceIndex }) * 6;
     if (start + 5 >= index.count) {
         return getAllTriangles(mesh).slice(0, 2);
+    }
+
+    return [
+        [index.getX(start), index.getX(start + 1), index.getX(start + 2)],
+        [index.getX(start + 3), index.getX(start + 4), index.getX(start + 5)]
+    ];
+}
+
+function getMergedBlockFaceTriangles(mesh, faceIndex) {
+    const index = mesh.geometry.index;
+    if (!index) {
+        return getAllTriangles(mesh).slice(Math.floor(faceIndex / 2) * 2, Math.floor(faceIndex / 2) * 2 + 2);
+    }
+
+    const start = Math.floor(faceIndex / 2) * 6;
+    if (start + 5 >= index.count) {
+        return getAllTriangles(mesh).slice(Math.floor(faceIndex / 2) * 2, Math.floor(faceIndex / 2) * 2 + 2);
     }
 
     return [
@@ -379,7 +418,38 @@ function buildCurrentUvMap(targets) {
 }
 
 function assignTextureToFaces(selectedFaces, texture, { preserveUvLayout = false } = {}) {
-    if (!texture || selectedFaces.length === 0) return false;
+    if (selectedFaces.length === 0) return false;
+
+    if (!texture) {
+        selectedFaces.forEach((face) => {
+            if (face.data?.type === 'block') {
+                ensureEditableBlockMaterials(face.mesh);
+                if (face.applyToWholeMesh) {
+                    face.mesh.material = face.mesh.material.map((material) => {
+                        const nextMaterial = material.clone();
+                        nextMaterial.map = null;
+                        nextMaterial.needsUpdate = true;
+                        return nextMaterial;
+                    });
+                    return;
+                }
+
+                const materialIndex = getBlockMaterialIndex(face);
+                const currentMaterial = face.mesh.material[materialIndex];
+                const nextMaterial = currentMaterial.clone();
+                nextMaterial.map = null;
+                nextMaterial.needsUpdate = true;
+                face.mesh.material[materialIndex] = nextMaterial;
+                return;
+            }
+
+            const nextMaterial = face.mesh.material.clone();
+            nextMaterial.map = null;
+            nextMaterial.needsUpdate = true;
+            face.mesh.material = nextMaterial;
+        });
+        return true;
+    }
 
     const targets = collectUvTargets(selectedFaces);
     const pointMap = preserveUvLayout
@@ -814,6 +884,59 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         return { minU, maxU, minV, maxV };
     }
 
+    function getFaceIndexForNormal(mesh, targetNormal, planeD) {
+        const geometry = mesh?.geometry;
+        if (!geometry?.index || !geometry?.attributes?.position) return -1;
+
+        const localNormal = new THREE.Vector3();
+        const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+
+        for (let triangleIndex = 0; triangleIndex < geometry.index.count / 3; triangleIndex += 2) {
+            const a = new THREE.Vector3().fromBufferAttribute(geometry.attributes.position, geometry.index.getX(triangleIndex * 3));
+            const b = new THREE.Vector3().fromBufferAttribute(geometry.attributes.position, geometry.index.getX(triangleIndex * 3 + 1));
+            const c = new THREE.Vector3().fromBufferAttribute(geometry.attributes.position, geometry.index.getX(triangleIndex * 3 + 2));
+
+            localNormal.crossVectors(c.clone().sub(b), a.clone().sub(b)).normalize();
+            const worldNormal = localNormal.clone().applyMatrix3(normalMatrix).normalize();
+            if (worldNormal.dot(targetNormal) <= 0.99) continue;
+
+            const worldPoint = a.clone().applyMatrix4(mesh.matrixWorld);
+            if (Math.abs(targetNormal.dot(worldPoint) - planeD) > 1e-4) continue;
+            return triangleIndex;
+        }
+
+        return -1;
+    }
+
+    function getCoplanarBlockFaceCandidates(entries, worldNormal, planeD) {
+        const candidates = [];
+
+        for (const entry of entries) {
+            if (!entry?.mesh) continue;
+            const candidateFaceIndex = getFaceIndexForNormal(entry.mesh, worldNormal, planeD);
+            if (candidateFaceIndex === -1) continue;
+
+            const face = {
+                mesh: entry.mesh,
+                data: { type: 'block', entry },
+                faceIndex: candidateFaceIndex
+            };
+            if (!isFaceExposed(face)) continue;
+
+            const bounds = getProjectedFaceBounds(entry.mesh, candidateFaceIndex, worldNormal);
+            if (!bounds) continue;
+
+            candidates.push({
+                mesh: entry.mesh,
+                entry,
+                faceIndex: candidateFaceIndex,
+                bounds
+            });
+        }
+
+        return candidates;
+    }
+
     function rangesOverlapWithLength(minA, maxA, minB, maxB, epsilon = 1e-4) {
         return (Math.min(maxA, maxB) - Math.max(minA, minB)) > epsilon;
     }
@@ -975,52 +1098,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         
         const allBlocks = blockManager.getBlockEntries().filter((entry) => entry.active);
         const jointSelectionType = document.querySelector('input[name="joint-face-selection-type"]:checked')?.value ?? 'type-2';
-
-        function getFaceIndexForNormal(mesh, targetNormal) {
-            const geom = mesh.geometry;
-            if (!geom?.index || !geom?.attributes?.position) return -1;
-            const _normal = new THREE.Vector3();
-            const _nMat = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
-            
-            // BoxGeometry has 12 faces (triangles), 2 per side. 6 sides total.
-            for (let i = 0; i < geom.index.count / 3; i+=2) {
-                const _a = new THREE.Vector3().fromBufferAttribute(geom.attributes.position, geom.index.getX(i * 3));
-                const _b = new THREE.Vector3().fromBufferAttribute(geom.attributes.position, geom.index.getX(i * 3 + 1));
-                const _c = new THREE.Vector3().fromBufferAttribute(geom.attributes.position, geom.index.getX(i * 3 + 2));
-                
-                const _cb = new THREE.Vector3().subVectors(_c, _b);
-                const _ab = new THREE.Vector3().subVectors(_a, _b);
-                _normal.crossVectors(_cb, _ab).normalize();
-                const _wNormal = _normal.clone().applyMatrix3(_nMat).normalize();
-                
-                // If normals match
-                if (_wNormal.dot(targetNormal) > 0.99) {
-                    // Check if coplanar
-                    const _p = _a.clone().applyMatrix4(mesh.matrixWorld);
-                    if (Math.abs(targetNormal.dot(_p) - planeD) < 1e-4) {
-                        return i; // Return the first triangle of the quad
-                    }
-                }
-            }
-            return -1;
-        }
-
-        const candidates = [];
-        for (const entry of allBlocks) {
-            if (!entry.mesh) continue;
-            const candidateFaceIndex = getFaceIndexForNormal(entry.mesh, worldNormal);
-            if (candidateFaceIndex === -1) continue;
-
-            const bounds = getProjectedFaceBounds(entry.mesh, candidateFaceIndex, worldNormal);
-            if (!bounds) continue;
-
-            candidates.push({
-                mesh: entry.mesh,
-                entry,
-                faceIndex: candidateFaceIndex,
-                bounds
-            });
-        }
+        const candidates = getCoplanarBlockFaceCandidates(allBlocks, worldNormal, planeD);
 
         const startCandidate = candidates.find((candidate) => candidate.mesh === startMesh);
         if (!startCandidate) {
@@ -1177,63 +1255,59 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             return nextFace ? [nextFace] : [];
         }
 
-        const faces = [];
-        for (const candidateEntry of blockManager.getBlockEntries()) {
-            if (!candidateEntry.active || candidateEntry.geometryType !== 'cube' || !candidateEntry.mesh) continue;
-            for (let materialIndex = 0; materialIndex < 6; materialIndex += 1) {
-                const candidateFace = {
-                    mesh: candidateEntry.mesh,
-                    data: { type: 'block', entry: candidateEntry },
-                    faceIndex: materialIndex * 2
-                };
-                if (!isFaceExposed(candidateFace)) continue;
-                faces.push(candidateFace);
-            }
-        }
+        const normal = new THREE.Vector3();
+        const positions = nextFace.mesh.geometry.attributes.position;
+        const index = nextFace.mesh.geometry.index;
+        const baseFaceIndex = getBlockMaterialIndex(nextFace) * 2;
+        const a = new THREE.Vector3().fromBufferAttribute(positions, index.getX(baseFaceIndex * 3));
+        const b = new THREE.Vector3().fromBufferAttribute(positions, index.getX(baseFaceIndex * 3 + 1));
+        const c = new THREE.Vector3().fromBufferAttribute(positions, index.getX(baseFaceIndex * 3 + 2));
+        normal.crossVectors(c.clone().sub(b), a.clone().sub(b)).normalize();
 
-        const nodes = new Map();
-        const edgeMap = new Map();
-        for (const face of faces) {
-            const faceId = getFaceIdentity(face);
-            nodes.set(faceId, face);
-            for (const edgeKey of getFaceEdgeKeys(face)) {
-                if (!edgeMap.has(edgeKey)) {
-                    edgeMap.set(edgeKey, []);
-                }
-                edgeMap.get(edgeKey).push(faceId);
-            }
-        }
-
-        const startId = getFaceIdentity({
-            mesh: nextFace.mesh,
-            data: { type: 'block', entry },
-            faceIndex: getBlockMaterialIndex(nextFace) * 2
-        });
-        if (!nodes.has(startId)) {
+        const normalMatrix = new THREE.Matrix3().getNormalMatrix(nextFace.mesh.matrixWorld);
+        const worldNormal = normal.clone().applyMatrix3(normalMatrix).normalize();
+        const planePoint = a.clone().applyMatrix4(nextFace.mesh.matrixWorld);
+        const planeD = worldNormal.dot(planePoint);
+        const candidates = getCoplanarBlockFaceCandidates(
+            blockManager.getBlockEntries().filter((candidate) => candidate.active && candidate.geometryType === 'cube'),
+            worldNormal,
+            planeD
+        );
+        const startCandidate = candidates.find((candidate) => candidate.mesh === nextFace.mesh);
+        if (!startCandidate) {
             return [nextFace];
         }
 
-        const visited = new Set([startId]);
-        const queue = [{ faceId: startId, distance: 0 }];
-        const selectedFaceIds = [];
-
-        while (queue.length > 0) {
-            const current = queue.shift();
-            selectedFaceIds.push(current.faceId);
-            if (current.distance >= depth) continue;
-
-            const currentFace = nodes.get(current.faceId);
-            for (const edgeKey of getFaceEdgeKeys(currentFace)) {
-                const adjacentIds = edgeMap.get(edgeKey) ?? [];
-                for (const adjacentFaceId of adjacentIds) {
-                    if (visited.has(adjacentFaceId) || adjacentFaceId === current.faceId) continue;
-                    visited.add(adjacentFaceId);
-                    queue.push({ faceId: adjacentFaceId, distance: current.distance + 1 });
-                }
-            }
+        if (depth <= 0) {
+            return [{
+                mesh: startCandidate.mesh,
+                data: { type: 'block', entry: startCandidate.entry },
+                faceIndex: startCandidate.faceIndex
+            }];
         }
 
-        return selectedFaceIds.map((faceId) => nodes.get(faceId)).filter(Boolean);
+        const uniformGrid = buildUniformFaceGrid(candidates, startCandidate.bounds);
+        if (!uniformGrid) {
+            return [{
+                mesh: startCandidate.mesh,
+                data: { type: 'block', entry: startCandidate.entry },
+                faceIndex: startCandidate.faceIndex
+            }];
+        }
+
+        const selectedCandidates = [];
+        for (const candidate of candidates) {
+            const col = Math.round((candidate.bounds.minU - startCandidate.bounds.minU) / (startCandidate.bounds.maxU - startCandidate.bounds.minU));
+            const row = Math.round((candidate.bounds.minV - startCandidate.bounds.minV) / (startCandidate.bounds.maxV - startCandidate.bounds.minV));
+            if (Math.max(Math.abs(col), Math.abs(row)) > depth) continue;
+            selectedCandidates.push(candidate);
+        }
+
+        return selectedCandidates.map((candidate) => ({
+            mesh: candidate.mesh,
+            data: { type: 'block', entry: candidate.entry },
+            faceIndex: candidate.faceIndex
+        }));
     }
 
     function handleFaceHover(nextFace) {
@@ -1257,13 +1331,18 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         setFacePreviewMeshes(hoveredFacePreviewMeshes, previewFaces, FACE_HOVER_EMISSIVE, 0.34);
     }
 
-    function handleFaceSelect(nextFace) {
+    function handleFaceSelect(nextFace, event = null) {
         const isJoint = document.getElementById('joint-face-checkbox')?.checked;
+        const existingFaces = event?.shiftKey ? getSelectedFaces(state) : [];
 
         state.selectedFace = null;
         clearFacePreviewMeshes(selectedFacePreviewMeshes);
 
         if (!nextFace) {
+            if (existingFaces.length > 0) {
+                state.selectedFace = existingFaces;
+                setFacePreviewMeshes(selectedFacePreviewMeshes, existingFaces, FACE_SELECTED_EMISSIVE, 0.52);
+            }
             handleFaceHover(state.hoveredFace?.[0] ?? null);
             onUpdate();
             return;
@@ -1276,8 +1355,12 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             facesToSelect = getJointFaceBlocks(nextFace.mesh, nextFace.faceIndex);
         }
 
-        state.selectedFace = facesToSelect;
-        setFacePreviewMeshes(selectedFacePreviewMeshes, facesToSelect, FACE_SELECTED_EMISSIVE, 0.52);
+        const finalSelection = event?.shiftKey
+            ? mergeUniqueFaces(existingFaces, facesToSelect)
+            : facesToSelect;
+
+        state.selectedFace = finalSelection;
+        setFacePreviewMeshes(selectedFacePreviewMeshes, finalSelection, FACE_SELECTED_EMISSIVE, 0.52);
         handleFaceHover(nextFace);
         onUpdate();
     }
@@ -1731,7 +1814,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             hideJoinMenu();
             hideLinePreview();
             const face = pickFace();
-            handleFaceSelect(face);
+            handleFaceSelect(face, event);
             return;
         }
 
@@ -1817,13 +1900,11 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     function onPointerDown(event) {
         if (state.workMode !== 'classic') return;
         if (event.button !== 0) return;
-        if (state.controlMode === 'select-face' || state.controlMode === 'select-face-neighbors' || state.controlMode === 'blocks-keyboard') {
-            clickDragState = {
-                startX: event.clientX,
-                startY: event.clientY,
-                moved: false
-            };
-        }
+        clickDragState = {
+            startX: event.clientX,
+            startY: event.clientY,
+            moved: false
+        };
     }
 
     function onPointerUp(event) {
@@ -1897,6 +1978,15 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
                 onUpdate();
             }
             return applied;
+        },
+        updateTextureTransform: (scope = 'selection', texture) => {
+            const targets = getUvTargets(scope).filter((face) => Boolean(getFaceMaterial(face)?.map));
+            if (targets.length === 0) return false;
+            const updated = assignTextureToFaces(targets, texture, { preserveUvLayout: true });
+            if (updated) {
+                onUpdate();
+            }
+            return updated;
         }
     };
 }

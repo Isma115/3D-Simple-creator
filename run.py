@@ -188,6 +188,7 @@ def run_desktop_window(port, httpd):
         js_api=bridge,
         width=1440,
         height=960,
+        maximized=True,
         min_size=(1100, 700),
         background_color='#000000',
         menu=menus

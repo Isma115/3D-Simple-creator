@@ -7,6 +7,7 @@ const TEXTURE_FILE_EXTENSIONS = [
 ];
 const TEXTURE_FILE_ACCEPT = `${TEXTURE_FILE_EXTENSIONS.join(',')},image/*`;
 const TEXTURE_FILE_FORMATS_LABEL = 'PNG, APNG, JPG, JPEG, JPE, JFIF, PJPEG, PJP, WEBP, AVIF, GIF, BMP, DIB, SVG, SVGZ, ICO, CUR, TIF, TIFF, HEIC, HEIF, QOI, TGA, PNM, PBM, PGM, PPM y PAM.';
+const NO_TEXTURE_ID = '__no-texture__';
 
 export function createTextureManager() {
     const textureModal = document.getElementById('texture-modal');
@@ -19,27 +20,21 @@ export function createTextureManager() {
     const quickApplyBtn = document.getElementById('quick-apply-texture-btn');
     const quickTextureStatus = document.getElementById('quick-texture-status');
     const quickTextureContent = document.getElementById('quick-texture-content');
-    const toggleQuickTexturesBtn = document.getElementById('toggle-quick-textures-btn');
+    const quickTextureTransform = document.getElementById('quick-texture-transform');
+    const quickTextureOffsetX = document.getElementById('quick-texture-offset-x');
+    const quickTextureOffsetY = document.getElementById('quick-texture-offset-y');
+    const quickTextureOffsetXValue = document.getElementById('quick-texture-offset-x-value');
+    const quickTextureOffsetYValue = document.getElementById('quick-texture-offset-y-value');
 
     const textures = []; // Array of { id, name, dataUrl, threeTexture }
     let selectedTextureId = null;
     let onApplyCallback = null;
     let onQuickApplyCallback = null;
     let onSelectionChangeCallback = null;
+    let onTransformChangeCallback = null;
     let quickApplyAvailable = false;
-    let quickPanelExpanded = false;
     
     const textureLoader = new THREE.TextureLoader();
-
-    function setQuickPanelExpanded(expanded) {
-        quickPanelExpanded = expanded;
-        if (quickTextureContent) {
-            quickTextureContent.style.display = expanded ? 'block' : 'none';
-        }
-        if (toggleQuickTexturesBtn) {
-            toggleQuickTexturesBtn.textContent = expanded ? 'Ocultar' : 'Lista';
-        }
-    }
 
     function updateQuickStatus() {
         if (!quickTextureStatus) return;
@@ -50,12 +45,17 @@ export function createTextureManager() {
         }
 
         if (textures.length === 0) {
-            quickTextureStatus.textContent = 'Carga una textura y aparecera aqui.';
+            quickTextureStatus.textContent = 'Carga una textura o usa Sin textura.';
             return;
         }
 
         if (selectedTextureId === null) {
-            quickTextureStatus.textContent = 'Elige una textura de la lista.';
+            quickTextureStatus.textContent = 'Elige una textura o Sin textura.';
+            return;
+        }
+
+        if (selectedTextureId === NO_TEXTURE_ID) {
+            quickTextureStatus.textContent = 'Pulsa "Aplicar" para quitar la textura.';
             return;
         }
 
@@ -70,6 +70,58 @@ export function createTextureManager() {
             quickApplyBtn.disabled = !(selectedTextureId !== null && quickApplyAvailable);
         }
         updateQuickStatus();
+    }
+
+    function getSelectedTextureEntry() {
+        if (!selectedTextureId || selectedTextureId === NO_TEXTURE_ID) return null;
+        return textures.find((item) => item.id === selectedTextureId) ?? null;
+    }
+
+    function updateTransformControls() {
+        const selectedTexture = getSelectedTextureEntry()?.threeTexture ?? null;
+        const visible = Boolean(selectedTexture);
+
+        if (quickTextureTransform) {
+            quickTextureTransform.hidden = !visible;
+        }
+
+        if (!selectedTexture) {
+            if (quickTextureOffsetX) quickTextureOffsetX.value = '0';
+            if (quickTextureOffsetY) quickTextureOffsetY.value = '0';
+            if (quickTextureOffsetXValue) quickTextureOffsetXValue.textContent = '0.00';
+            if (quickTextureOffsetYValue) quickTextureOffsetYValue.textContent = '0.00';
+            return;
+        }
+
+        const offsetX = selectedTexture.offset?.x ?? 0;
+        const offsetY = selectedTexture.offset?.y ?? 0;
+        if (quickTextureOffsetX) quickTextureOffsetX.value = offsetX.toFixed(2);
+        if (quickTextureOffsetY) quickTextureOffsetY.value = offsetY.toFixed(2);
+        if (quickTextureOffsetXValue) quickTextureOffsetXValue.textContent = offsetX.toFixed(2);
+        if (quickTextureOffsetYValue) quickTextureOffsetYValue.textContent = offsetY.toFixed(2);
+    }
+
+    function notifySelectionChange(texture = null) {
+        if (onSelectionChangeCallback) {
+            onSelectionChangeCallback(texture);
+        }
+    }
+
+    function notifyTransformChange(texture = null) {
+        if (onTransformChangeCallback) {
+            onTransformChangeCallback(texture);
+        }
+    }
+
+    function updateSelectedTextureOffset(axis, rawValue) {
+        const selectedTexture = getSelectedTextureEntry()?.threeTexture ?? null;
+        if (!selectedTexture || !selectedTexture.offset) return;
+        const parsed = Number.parseFloat(rawValue);
+        const value = Number.isFinite(parsed) ? parsed : 0;
+        selectedTexture.offset[axis] = value;
+        selectedTexture.needsUpdate = true;
+        updateTransformControls();
+        notifyTransformChange(selectedTexture);
     }
 
     function loadTexture(dataUrl) {
@@ -102,9 +154,7 @@ export function createTextureManager() {
             selectedTextureId = texData.id;
         }
         renderLists();
-        if (onSelectionChangeCallback) {
-            onSelectionChangeCallback(select ? texData.threeTexture : textures.find((item) => item.id === selectedTextureId)?.threeTexture ?? null);
-        }
+        notifySelectionChange(select ? texData.threeTexture : getSelectedTextureEntry()?.threeTexture ?? null);
         return texData;
     }
 
@@ -127,7 +177,7 @@ export function createTextureManager() {
             selectedTextureId = tex.id;
             updateApplyButtons();
             renderLists();
-            if (onSelectionChangeCallback) onSelectionChangeCallback(tex.threeTexture);
+            notifySelectionChange(tex.threeTexture);
         });
 
         const deleteBtn = document.createElement('button');
@@ -142,12 +192,27 @@ export function createTextureManager() {
         return item;
     }
 
+    function createNoTextureItem() {
+        const item = document.createElement('div');
+        item.className = 'texture-item texture-item-reset' + (selectedTextureId === NO_TEXTURE_ID ? ' selected' : '');
+        item.title = 'Quitar textura';
+        item.textContent = 'Sin textura';
+        item.addEventListener('click', () => {
+            selectedTextureId = NO_TEXTURE_ID;
+            updateApplyButtons();
+            renderLists();
+            notifySelectionChange(null);
+        });
+        return item;
+    }
+
     function renderList(container, displayModeWhenFilled, emptyDisplay = 'none') {
         if (!container) return;
         container.innerHTML = '';
+        container.appendChild(createNoTextureItem());
 
         if (textures.length === 0) {
-            container.style.display = emptyDisplay;
+            container.style.display = displayModeWhenFilled || emptyDisplay;
             return;
         }
 
@@ -162,6 +227,7 @@ export function createTextureManager() {
         renderList(textureListEl, 'grid');
         renderList(quickTextureListEl, 'flex');
         updateApplyButtons();
+        updateTransformControls();
     }
 
     function removeTexture(id) {
@@ -176,9 +242,7 @@ export function createTextureManager() {
                 selectedTextureId = null;
             }
             renderLists();
-            if (onSelectionChangeCallback) {
-                onSelectionChangeCallback(selectedTextureId ? textures.find(t => t.id === selectedTextureId)?.threeTexture ?? null : null);
-            }
+            notifySelectionChange(getSelectedTextureEntry()?.threeTexture ?? null);
         }
     }
 
@@ -219,35 +283,50 @@ export function createTextureManager() {
         });
     }
     
+    if (quickTextureContent) {
+        quickTextureContent.style.display = 'flex';
+    }
+
     if (applyBtn) {
         applyBtn.addEventListener('click', () => {
-            if (selectedTextureId && onApplyCallback) {
-                const tex = textures.find(t => t.id === selectedTextureId);
-                if (tex) {
-                    onApplyCallback(tex.threeTexture);
-                }
+            if (selectedTextureId === null || !onApplyCallback) return;
+            if (selectedTextureId === NO_TEXTURE_ID) {
+                onApplyCallback(null);
+                return;
+            }
+            const tex = textures.find(t => t.id === selectedTextureId);
+            if (tex) {
+                onApplyCallback(tex.threeTexture);
             }
         });
     }
 
     if (quickApplyBtn) {
         quickApplyBtn.addEventListener('click', () => {
-            if (selectedTextureId && onQuickApplyCallback) {
-                const tex = textures.find((item) => item.id === selectedTextureId);
-                if (tex) {
-                    onQuickApplyCallback(tex.threeTexture);
-                }
+            if (selectedTextureId === null || !onQuickApplyCallback) return;
+            if (selectedTextureId === NO_TEXTURE_ID) {
+                onQuickApplyCallback(null);
+                return;
+            }
+            const tex = textures.find((item) => item.id === selectedTextureId);
+            if (tex) {
+                onQuickApplyCallback(tex.threeTexture);
             }
         });
     }
 
-    if (toggleQuickTexturesBtn) {
-        toggleQuickTexturesBtn.addEventListener('click', () => {
-            setQuickPanelExpanded(!quickPanelExpanded);
+    if (quickTextureOffsetX) {
+        quickTextureOffsetX.addEventListener('input', (event) => {
+            updateSelectedTextureOffset('x', event.target.value);
         });
     }
 
-    setQuickPanelExpanded(false);
+    if (quickTextureOffsetY) {
+        quickTextureOffsetY.addEventListener('input', (event) => {
+            updateSelectedTextureOffset('y', event.target.value);
+        });
+    }
+
     renderLists();
 
     return {
@@ -265,6 +344,9 @@ export function createTextureManager() {
         },
         onSelectionChange: (cb) => {
             onSelectionChangeCallback = cb;
+        },
+        onTransformChange: (cb) => {
+            onTransformChangeCallback = cb;
         },
         setQuickApplyAvailable: (available) => {
             quickApplyAvailable = available;

@@ -1,0 +1,142 @@
+:root {
+  color-scheme: dark;
+  --bg: #171b21;
+  --bg-soft: #20262e;
+  --panel: rgba(32, 38, 46, 0.9);
+  --panel-strong: rgba(25, 29, 36, 0.96);
+  --border: 1px solid rgba(255, 255, 255, 0.08);
+  --text: #e8edf3;
+  --text-soft: rgba(232, 237, 243, 0.68);
+  --accent: #f39a4a;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top, rgba(243, 154, 74, 0.08), transparent 28%),
+    linear-gradient(180deg, #13171c, #1a2027 40%, #151a20);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.viewer-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+  padding: 18px;
+}
+
+.viewer-toolbar,
+.viewer-stage-card {
+  border: var(--border);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.viewer-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+.viewer-copy h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.viewer-copy p {
+  margin: 4px 0 0;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.viewer-actions {
+  display: flex;
+  align-items: center;
+}
+
+.viewer-actions button {
+  appearance: none;
+  border: var(--border);
+  background: linear-gradient(180deg, #f6ad68, #d67b31);
+  color: #171b21;
+  font: inherit;
+  font-weight: 600;
+  padding: 11px 15px;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.viewer-actions button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.viewer-stage-card {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.viewer-stage-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--panel-strong);
+  border-bottom: var(--border);
+  font-size: 0.84rem;
+}
+
+#viewer-status {
+  color: var(--text);
+}
+
+#viewer-format {
+  color: var(--text-soft);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+}
+
+.viewer-canvas-wrap {
+  position: relative;
+  min-height: 0;
+}
+
+.viewer-canvas-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media (max-width: 760px) {
+  .viewer-shell {
+    padding: 12px;
+  }
+
+  .viewer-toolbar,
+  .viewer-stage-meta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #viewer-format {
+    font-size: 0.7rem;
+  }
+}

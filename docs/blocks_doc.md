@@ -1,7 +1,7 @@
 # Documentacion de Bloques (`src/blocks.js`)
 
 ## Explicacion Sencilla (No Tecnica)
-Este modulo gestiona los cubos del modo bloques. Se encarga de crear, mostrar, ocultar, dividir y resaltar los cubos cuando pasas el raton o los seleccionas. Ahora tambien dibuja una malla blanca por encima de cada bloque para que se vean claramente las separaciones entre piezas del modelo. Cuando una pieza queda seleccionada, ella misma permanece en naranja y ya no hace falta un punto aparte para indicarlo.
+Este modulo gestiona los cubos del modo bloques. Se encarga de crear, mostrar, ocultar, dividir, redimensionar y resaltar los cubos cuando pasas el raton o los seleccionas. Ahora tambien dibuja una malla blanca por encima de cada bloque para que se vean claramente las separaciones entre piezas del modelo. Cuando una pieza queda seleccionada, ella misma permanece en naranja y ya no hace falta un punto aparte para indicarlo. Ademas, la fusion por seleccion vuelve a funcionar correctamente cuando hay varios bloques marcados.
 
 ## Explicacion Tecnica
 `src/blocks.js` expone `createBlockManager({ scene, state, entryManager })` y devuelve:
@@ -11,7 +11,9 @@ Este modulo gestiona los cubos del modo bloques. Se encarga de crear, mostrar, o
 - `setHovered` y `setSelected` para resaltar un bloque en naranja cuando el usuario lo apunta o lo selecciona.
 - `getBlockEntries`, `getBlockByMesh` y `getBlockByKey` para soporte de raycasting, busqueda rapida y operaciones de borrado.
 - `canSplitBlock(entry)` y `splitBlock(entry)` para dividir cubos perfectos en 8 bloques mas pequenos de forma recursiva. Los prismas rectangulares fusionados no se dividen desde el menu contextual porque dejarian de ser cubos.
+- `updateBlockDimensions(entry, newDimensions)` recalcula la escala real del mesh, actualiza el identificador interno y mantiene coherentes las dimensiones editables cuando una pieza se redimensiona con el gizmo.
 - `optimizeBlocks()` para recorrer todos los cubos activos alineados a la misma rejilla, reconstruir el volumen ocupado en celdas y reagruparlo en el menor numero posible de prismas rectangulares mediante una descomposicion greedy.
+- `mergeAllEntriesIntoComposite(targetEntries)` puede reutilizarse tanto para todo el escenario como para un subconjunto seleccionado, lo que permite fusionar varios bloques marcados en una sola operacion siempre que haya grupos compatibles.
 - Genera tambien un `EdgesGeometry` blanco por bloque y lo monta como hijo del mesh principal para que el modelo en modo bloques muestre sus divisiones de forma permanente.
 
 Cada bloque se almacena como una entrada con estado (`active`, `hovered`, `selected`), tamano propio, dimensiones reales (`dimensions`), un identificador de geometria (`geometryType`) y un mesh escalado del material base. Si existe `entryManager`, tambien registra puntos en las esquinas del bloque activo para que el flujo de lineas siga pudiendo reutilizar vertices del modelo hecho con bloques. Cuando varios cubos se fusionan en un prisma rectangular, esos puntos tambien se reducen automaticamente a las nuevas esquinas externas.

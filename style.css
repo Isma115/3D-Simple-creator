@@ -145,11 +145,11 @@ body[data-native-menus='true'] #bottom-left-tools {
 #ui-overlay {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: 0;
+  padding: 8px 10px;
   width: auto;
-  min-width: 210px;
-  max-width: min(70vw, 460px);
+  min-width: 92px;
+  max-width: min(30vw, 140px);
   background: linear-gradient(180deg, rgba(45, 49, 56, 0.94), rgba(32, 35, 41, 0.94));
   border: var(--panel-border);
   border-radius: var(--panel-radius);
@@ -221,6 +221,16 @@ body[data-native-menus='true'] #bottom-left-tools {
   accent-color: #ff8a00;
 }
 
+.range-option input[type='number'] {
+  width: 56px;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(18, 20, 25, 0.3);
+  color: rgba(240, 244, 248, 0.92);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+}
+
 .range-option.compact {
   gap: 4px;
   font-size: 0.74rem;
@@ -243,13 +253,6 @@ body[data-native-menus='true'] #bottom-left-tools {
   gap: 8px;
 }
 
-.control-inline-group output {
-  min-width: 20px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.72rem;
-  color: #f4b26f;
-  text-align: right;
-}
 
 .context-menu {
   position: absolute;
@@ -534,11 +537,11 @@ canvas {
 
 .editor-help-panel {
   pointer-events: auto;
-  width: min(264px, calc(100vw - 40px));
+  width: min(220px, calc(100vw - 40px));
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: 6px;
+  padding: 9px 10px;
   border-radius: var(--panel-radius);
   background: linear-gradient(180deg, rgba(45, 49, 56, 0.96), rgba(31, 34, 40, 0.96));
   border: var(--panel-border);
@@ -548,62 +551,28 @@ canvas {
 .editor-help-mode {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   padding-top: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .editor-help-mode strong {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.92);
 }
 
-.help-shortcuts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-  gap: 6px;
-}
-
-.help-shortcuts-overview {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.help-shortcut-card {
+.help-lines {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-height: 54px;
-  padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--panel-radius);
-  background: rgba(12, 15, 19, 0.3);
+  gap: 3px;
 }
 
-.help-shortcut-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  min-height: 18px;
-  padding: 0 4px;
+.help-line {
+  padding: 2px 0;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  color: rgba(233, 238, 245, 0.92);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.help-shortcut-keys {
-  font-size: 0.62rem;
-  line-height: 1.2;
-  color: rgba(240, 244, 248, 0.9);
-}
-
-.help-shortcut-label {
-  font-size: 0.66rem;
-  line-height: 1.15;
-  color: rgba(199, 207, 219, 0.72);
+  font-size: 0.63rem;
+  line-height: 1.25;
+  color: rgba(236, 241, 247, 0.88);
 }
 
 .texture-upload-row {
@@ -626,18 +595,44 @@ canvas {
 
 .quick-texture-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: flex-start;
-  gap: 10px;
+  gap: 0;
 }
 
 .quick-texture-content {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .quick-texture-list {
   min-height: 40px;
   padding: 2px 0 4px;
+}
+
+.texture-transform-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.texture-transform-title {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(203, 211, 222, 0.58);
+}
+
+.range-value {
+  min-width: 34px;
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem;
+  color: rgba(236, 241, 247, 0.78);
 }
 
 .texture-upload-row button {
@@ -724,6 +719,19 @@ canvas {
   background-size: cover;
   background-position: center;
   transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.texture-item.texture-item-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(66, 71, 80, 0.95), rgba(34, 38, 45, 0.95));
+  color: rgba(238, 242, 247, 0.9);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+  text-align: center;
+  padding: 4px;
 }
 
 .texture-item:hover {

@@ -120,13 +120,7 @@
 
   <!-- UI Overlay -->
   <div id="ui-stack">
-    <div id="ui-overlay" class="glass-panel">
-      <div class="status">
-        <span id="coordinates-display">X: 0.0, Y: 0.0, Z: 0.0</span>
-      </div>
-      <div class="status secondary">
-        <span>Figura: <strong id="active-geometry-display">Cubo</strong></span>
-      </div>
+    <div id="ui-overlay" class="glass-panel" hidden style="display: none;">
       <div id="fps-panel" class="status fps-panel" hidden>
         <span id="fps-display">FPS: 0</span>
       </div>
@@ -161,14 +155,13 @@
               <span>Caras vecinas</span>
               <div class="control-inline-group">
                 <input
-                  type="range"
+                  type="number"
                   id="face-neighbor-depth-input"
                   min="0"
-                  max="12"
                   step="1"
-                  value="1"
+                  value="0"
+                  inputmode="numeric"
                 >
-                <output id="face-neighbor-depth-value" for="face-neighbor-depth-input">1</output>
               </div>
             </label>
           </div>
@@ -179,32 +172,16 @@
 
   <div id="bottom-left-tools">
     <div id="editor-help-panel" class="editor-help-panel">
-      <div class="control-title">Ayuda visual</div>
-      <div class="help-shortcuts help-shortcuts-overview" aria-label="Atajos generales">
-        <div class="help-shortcut-card">
-          <span class="help-shortcut-icon" aria-hidden="true">LMB</span>
-          <span class="help-shortcut-keys">Izq + arrastrar</span>
-          <span class="help-shortcut-label">Girar</span>
-        </div>
-        <div class="help-shortcut-card">
-          <span class="help-shortcut-icon" aria-hidden="true">RMB</span>
-          <span class="help-shortcut-keys">Der + arrastrar</span>
-          <span class="help-shortcut-label">Mover</span>
-        </div>
-        <div class="help-shortcut-card">
-          <span class="help-shortcut-icon" aria-hidden="true">MW</span>
-          <span class="help-shortcut-keys">Rueda</span>
-          <span class="help-shortcut-label">Zoom</span>
-        </div>
-        <div class="help-shortcut-card">
-          <span class="help-shortcut-icon" aria-hidden="true">CMD</span>
-          <span class="help-shortcut-keys">⌘ + rueda</span>
-          <span class="help-shortcut-label">Modo</span>
-        </div>
+      <div class="control-title">Ayuda</div>
+      <div class="help-lines" aria-label="Atajos generales">
+        <div class="help-line">Izq arrastrar: girar</div>
+        <div class="help-line">Der arrastrar: mover</div>
+        <div class="help-line">Rueda: zoom</div>
+        <div class="help-line">Ctrl + rueda: modo</div>
       </div>
       <div class="editor-help-mode">
         <strong id="editor-help-mode-title">Bloques (teclado)</strong>
-        <div id="editor-help-mode-shortcuts" class="help-shortcuts" aria-live="polite"></div>
+        <div id="editor-help-mode-shortcuts" class="help-lines" aria-live="polite"></div>
       </div>
     </div>
     <div id="quick-texture-panel" class="quick-texture-panel" data-expanded="false">
@@ -213,9 +190,6 @@
           <div class="control-title">Texturas</div>
           <p id="quick-texture-status" class="panel-hint">Selecciona una cara para aplicar una textura.</p>
         </div>
-        <button id="toggle-quick-textures-btn" class="action-button secondary small" type="button">
-          Lista
-        </button>
       </div>
       <div class="texture-action-row compact">
         <button id="quick-upload-texture-btn" class="action-button secondary small" type="button">
@@ -225,9 +199,26 @@
           Aplicar
         </button>
       </div>
-      <div id="quick-texture-content" class="quick-texture-content" style="display: none;">
+      <div id="quick-texture-content" class="quick-texture-content">
         <div id="quick-texture-list" class="texture-list quick-texture-list">
           <!-- Quick texture items will be added here -->
+        </div>
+        <div id="quick-texture-transform" class="texture-transform-panel" hidden>
+          <div class="texture-transform-title">Desplazamiento</div>
+          <label class="range-option compact">
+            <span>U</span>
+            <div class="control-inline-group">
+              <input type="range" id="quick-texture-offset-x" min="-1" max="1" step="0.01" value="0">
+              <span id="quick-texture-offset-x-value" class="range-value">0.00</span>
+            </div>
+          </label>
+          <label class="range-option compact">
+            <span>V</span>
+            <div class="control-inline-group">
+              <input type="range" id="quick-texture-offset-y" min="-1" max="1" step="0.01" value="0">
+              <span id="quick-texture-offset-y-value" class="range-value">0.00</span>
+            </div>
+          </label>
         </div>
       </div>
     </div>
@@ -236,7 +227,7 @@
   <div id="control-mode-toast" class="control-mode-toast" aria-live="polite" aria-hidden="true">
     <span class="control-mode-toast-label">Tipo de control</span>
     <strong id="control-mode-toast-value">Lineas</strong>
-    <span class="control-mode-toast-hint">Meta + rueda del raton</span>
+    <span class="control-mode-toast-hint">Ctrl + rueda del raton</span>
   </div>
 
   <div id="texture-modal" class="modal-backdrop" style="display: none;">

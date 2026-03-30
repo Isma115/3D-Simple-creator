@@ -191,6 +191,9 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         if (action.kind === 'block-move' && blockManager) {
             blockManager.updateBlockPosition(action.entry, action.positionBefore);
         }
+        if (action.kind === 'block-resize' && blockManager) {
+            blockManager.updateBlockDimensions(action.entry, action.dimensionsBefore, action.sizeBefore);
+        }
         const addFaces = isDelete;
         applyFaces(action.faces, addFaces);
         applyFaceRegistry(action.faceKeys, addFaces);
@@ -253,6 +256,9 @@ export function createUndoManager({ scene, state, entryManager, graphManager, bl
         }
         if (action.kind === 'block-move' && blockManager) {
             blockManager.updateBlockPosition(action.entry, action.positionAfter);
+        }
+        if (action.kind === 'block-resize' && blockManager) {
+            blockManager.updateBlockDimensions(action.entry, action.dimensionsAfter, action.sizeAfter);
         }
         const addFaces = !isDelete;
         applyFaces(action.faces, addFaces);

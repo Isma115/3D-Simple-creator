@@ -21,16 +21,39 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     action.textContent = 'Dividir';
     menu.appendChild(action);
 
+    const mergeAction = document.createElement('button');
+    mergeAction.type = 'button';
+    mergeAction.textContent = 'Fusionar seleccion';
+    menu.appendChild(mergeAction);
+
+    const resizeAction = document.createElement('button');
+    resizeAction.type = 'button';
+    resizeAction.textContent = 'Redimensionar';
+    menu.appendChild(resizeAction);
+
     document.body.appendChild(menu);
 
     const transformControl = new TransformControls(camera, renderer.domElement);
     transformControl.addEventListener('dragging-changed', function (event) {
         if (controls) controls.enabled = !event.value;
     });
+    transformControl.addEventListener('objectChange', () => {
+        if (!transformingEntry) return;
+        if (transformMode !== 'scale') return;
+        const baseSize = transformingEntry.mesh.geometry.boundingBox?.getSize(new THREE.Vector3()) ?? new THREE.Vector3(1, 1, 1);
+        transformingEntry.dimensions = new THREE.Vector3(
+            Math.abs(baseSize.x * transformingEntry.mesh.scale.x),
+            Math.abs(baseSize.y * transformingEntry.mesh.scale.y),
+            Math.abs(baseSize.z * transformingEntry.mesh.scale.z)
+        );
+    });
     scene.add(transformControl);
 
-    let displacingEntry = null;
+    let transformingEntry = null;
+    let transformMode = 'translate';
     let positionBeforeDisplace = null;
+    let dimensionsBeforeTransform = null;
+    let sizeBeforeTransform = null;
 
     function getTargetEntries(preferredEntry = null, { hoveredFirst = false } = {}) {
         const selectedEntries = blockManager.getSelectedEntries().filter((entry) => entry?.active);
@@ -54,33 +77,60 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         return selectedResult ?? splitResults[splitResults.length - 1];
     }
 
-    function finishDisplacement() {
-        if (!displacingEntry) return;
+    function finishTransform() {
+        if (!transformingEntry) return;
 
         transformControl.detach();
 
-        const positionAfter = displacingEntry.mesh.position.clone();
+        if (transformMode === 'scale') {
+            const dimensionsAfter = transformingEntry.dimensions.clone();
+            if (dimensionsBeforeTransform && dimensionsAfter.distanceToSquared(dimensionsBeforeTransform) > 0.0001) {
+                const nextSize = (
+                    Math.abs(dimensionsAfter.x - dimensionsAfter.y) <= 1e-4
+                    && Math.abs(dimensionsAfter.x - dimensionsAfter.z) <= 1e-4
+                ) ? dimensionsAfter.x : sizeBeforeTransform;
+                blockManager.updateBlockDimensions(transformingEntry, dimensionsAfter, nextSize);
+                undoManager.pushAction({
+                    kind: 'block-resize',
+                    entry: transformingEntry,
+                    dimensionsBefore: dimensionsBeforeTransform.clone(),
+                    dimensionsAfter: dimensionsAfter.clone(),
+                    sizeBefore: sizeBeforeTransform,
+                    sizeAfter: transformingEntry.size
+                });
+                onUpdate();
+            }
 
-        // Solo guardamos y actualizamos si realmente se ha movido (tolerancia leve)
-        if (positionAfter.distanceToSquared(positionBeforeDisplace) > 0.0001) {
-            blockManager.updateBlockPosition(displacingEntry, positionAfter);
+            transformingEntry = null;
+            dimensionsBeforeTransform = null;
+            sizeBeforeTransform = null;
+            positionBeforeDisplace = null;
+            transformMode = 'translate';
+            return;
+        }
 
+        const positionAfter = transformingEntry.mesh.position.clone();
+        if (positionBeforeDisplace && positionAfter.distanceToSquared(positionBeforeDisplace) > 0.0001) {
+            blockManager.updateBlockPosition(transformingEntry, positionAfter);
             undoManager.pushAction({
                 kind: 'block-move',
-                entry: displacingEntry,
+                entry: transformingEntry,
                 positionBefore: positionBeforeDisplace.clone(),
                 positionAfter: positionAfter.clone()
             });
             onUpdate();
         }
 
-        displacingEntry = null;
+        transformingEntry = null;
         positionBeforeDisplace = null;
+        dimensionsBeforeTransform = null;
+        sizeBeforeTransform = null;
+        transformMode = 'translate';
     }
 
     function onKeyDown(event) {
-        if (displacingEntry && (event.key === 'Enter' || event.key === 'Escape')) {
-            finishDisplacement();
+        if (transformingEntry && (event.key === 'Enter' || event.key === 'Escape')) {
+            finishTransform();
             return;
         }
 
@@ -195,12 +245,12 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         state.pathPoints = [state.currentPosition.clone()];
     }
 
-    function startDisplacement(entry) {
+    function startTransform(entry, mode = 'translate') {
         if (!entry || !entry.active) return;
-        if (displacingEntry === entry) return;
+        if (transformingEntry === entry && transformMode === mode) return;
 
-        if (displacingEntry) {
-            finishDisplacement();
+        if (transformingEntry) {
+            finishTransform();
         }
 
         const selectedEntries = blockManager.getSelectedEntries();
@@ -211,8 +261,12 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
             state.cursorMesh.position.copy(state.currentPosition);
             state.pathPoints = [state.currentPosition.clone()];
         }
-        displacingEntry = entry;
+        transformingEntry = entry;
+        transformMode = mode;
         positionBeforeDisplace = entry.position.clone();
+        dimensionsBeforeTransform = entry.dimensions.clone();
+        sizeBeforeTransform = entry.size ?? null;
+        transformControl.setMode(mode);
         transformControl.attach(entry.mesh);
     }
 
@@ -220,6 +274,7 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         currentEntry = entry;
         const targets = getTargetEntries(entry);
         const splittableTargets = targets.filter((target) => blockManager.canSplitBlock(target));
+        const mergeableTargets = targets.filter((target) => target?.active);
         action.disabled = splittableTargets.length === 0;
         if (splittableTargets.length === 0) {
             action.textContent = 'No divisible';
@@ -228,6 +283,8 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         } else {
             action.textContent = 'Dividir';
         }
+        mergeAction.disabled = mergeableTargets.length < 2;
+        resizeAction.disabled = !entry?.active;
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.style.display = 'block';
@@ -253,12 +310,12 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     }
 
     function onDocumentPointerDown(event) {
-        if (displacingEntry) {
+        if (transformingEntry) {
             // Si está arrastrando el gizmo o el ratón está sobre él, no hacer nada
             if (transformControl.dragging || transformControl.axis !== null) return;
 
             // Si el click fue fuera de la figura seleccionada o del gizmo, terminar el desplazamiento
-            finishDisplacement();
+            finishTransform();
         }
 
         if (menu.style.display === 'none') return;
@@ -317,7 +374,7 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
             && (now - lastClickInfo.time) <= DOUBLE_CLICK_DELAY_MS
         ) {
             lastClickInfo = null;
-            startDisplacement(entry);
+            startTransform(entry, 'translate');
             return;
         }
 
@@ -332,6 +389,19 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     action.addEventListener('click', () => {
         if (!currentEntry) return;
         performSplit(currentEntry);
+    });
+
+    mergeAction.addEventListener('click', () => {
+        const targets = getTargetEntries(currentEntry);
+        if (targets.length < 2) return;
+        hideMenu();
+        document.getElementById('merge-selected-blocks-button')?.click();
+    });
+
+    resizeAction.addEventListener('click', () => {
+        if (!currentEntry) return;
+        hideMenu();
+        startTransform(currentEntry, 'scale');
     });
 
     renderer.domElement.addEventListener('pointerdown', beginPointerInteraction);
