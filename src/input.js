@@ -120,7 +120,9 @@ function isPointInsideBlock(point, entry) {
 
 function addBlockBoundaryEdges(adjacency, edgeSources, blockManager, excludedEdgeKey = null) {
     if (!blockManager) return;
-    const activeBlocks = blockManager.getBlockEntries().filter((entry) => entry.active);
+    const activeBlocks = blockManager.getActiveBlockEntries
+        ? blockManager.getActiveBlockEntries()
+        : blockManager.getBlockEntries().filter((entry) => entry.active);
     const faces = [
         { axis: 'x', direction: -1 },
         { axis: 'x', direction: 1 },
@@ -607,9 +609,20 @@ export function attachKeyboardControls({
 
         const deleteKeys = new Set(['Delete', 'Backspace', 'Del', 'Supr']);
         if (deleteKeys.has(event.key) || deleteKeys.has(event.code)) {
+            if (state.controlMode === 'select-face' || state.controlMode === 'select-face-neighbors') {
+                event.preventDefault();
+                return;
+            }
             event.preventDefault();
             if (!hasModifier) {
-                if ((state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse') && blockManager) {
+                if (
+                    (
+                        state.controlMode === 'blocks-keyboard'
+                        || state.controlMode === 'blocks-mouse'
+                        || state.controlMode === 'blocks-pixel'
+                    )
+                    && blockManager
+                ) {
                     deleteSelectedBlock();
                 } else {
                     deleteSelectedPoint();
@@ -621,11 +634,15 @@ export function attachKeyboardControls({
         if (
             key === 'x'
             && state.workMode === 'classic'
-            && (state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse')
+            && (
+                state.controlMode === 'blocks-keyboard'
+                || state.controlMode === 'blocks-mouse'
+                || state.controlMode === 'blocks-pixel'
+            )
             && blockManager
         ) {
             event.preventDefault();
-            deleteHoveredBlock();
+            deleteSelectedBlock();
             return;
         }
 
@@ -719,7 +736,7 @@ export function attachKeyboardControls({
             onUpdate();
             return;
         }
-        if (state.controlMode === 'blocks-mouse') {
+        if (state.controlMode === 'blocks-mouse' || state.controlMode === 'blocks-pixel') {
             return;
         }
 

@@ -5,8 +5,8 @@ const TEXTURE_FILE_EXTENSIONS = [
     '.webp', '.avif', '.gif', '.bmp', '.dib', '.svg', '.svgz', '.ico', '.cur',
     '.tif', '.tiff', '.heic', '.heif', '.qoi', '.tga', '.pnm', '.pbm', '.pgm', '.ppm', '.pam'
 ];
-const TEXTURE_FILE_ACCEPT = `${TEXTURE_FILE_EXTENSIONS.join(',')},image/*`;
-const TEXTURE_FILE_FORMATS_LABEL = 'PNG, APNG, JPG, JPEG, JPE, JFIF, PJPEG, PJP, WEBP, AVIF, GIF, BMP, DIB, SVG, SVGZ, ICO, CUR, TIF, TIFF, HEIC, HEIF, QOI, TGA, PNM, PBM, PGM, PPM y PAM.';
+const TEXTURE_FILE_ACCEPT = 'image/*,*/*';
+const TEXTURE_FILE_FORMATS_LABEL = `${TEXTURE_FILE_EXTENSIONS.map((extension) => extension.slice(1).toUpperCase()).join(', ')}. Tambien se acepta cualquier otro formato que el navegador pueda abrir.`;
 const NO_TEXTURE_ID = '__no-texture__';
 
 export function createTextureManager() {
@@ -25,6 +25,12 @@ export function createTextureManager() {
     const quickTextureOffsetY = document.getElementById('quick-texture-offset-y');
     const quickTextureOffsetXValue = document.getElementById('quick-texture-offset-x-value');
     const quickTextureOffsetYValue = document.getElementById('quick-texture-offset-y-value');
+    const quickTextureAdvancedToggle = document.getElementById('quick-texture-advanced-toggle');
+    const quickTextureAdvanced = document.getElementById('quick-texture-advanced');
+    const quickTextureScale = document.getElementById('quick-texture-scale');
+    const quickTextureScaleValue = document.getElementById('quick-texture-scale-value');
+    const quickTextureRotation = document.getElementById('quick-texture-rotation');
+    const quickTextureRotationValue = document.getElementById('quick-texture-rotation-value');
 
     const textures = []; // Array of { id, name, dataUrl, threeTexture }
     let selectedTextureId = null;
@@ -33,6 +39,8 @@ export function createTextureManager() {
     let onSelectionChangeCallback = null;
     let onTransformChangeCallback = null;
     let quickApplyAvailable = false;
+    let quickTextureAdvancedVisible = false;
+    let activeTransformTexture = null;
     
     const textureLoader = new THREE.TextureLoader();
 
@@ -62,6 +70,21 @@ export function createTextureManager() {
         quickTextureStatus.textContent = 'Pulsa "Aplicar" para usarla en la cara seleccionada.';
     }
 
+    function updateAdvancedToggleLabel() {
+        if (!quickTextureAdvancedToggle) return;
+        quickTextureAdvancedToggle.textContent = quickTextureAdvancedVisible
+            ? 'Ocultar ajuste avanzado'
+            : 'Mostrar ajuste avanzado';
+    }
+
+    function setQuickTextureAdvancedVisible(visible, { force = false } = {}) {
+        if (!quickTextureAdvanced) return;
+        quickTextureAdvancedVisible = force ? visible : Boolean(visible);
+        quickTextureAdvanced.hidden = !quickTextureAdvancedVisible;
+        quickTextureAdvanced.style.display = quickTextureAdvancedVisible ? 'flex' : 'none';
+        updateAdvancedToggleLabel();
+    }
+
     function updateApplyButtons() {
         if (applyBtn) {
             applyBtn.disabled = selectedTextureId === null;
@@ -78,11 +101,17 @@ export function createTextureManager() {
     }
 
     function updateTransformControls() {
-        const selectedTexture = getSelectedTextureEntry()?.threeTexture ?? null;
+        const selectedTexture = activeTransformTexture ?? null;
         const visible = Boolean(selectedTexture);
 
         if (quickTextureTransform) {
             quickTextureTransform.hidden = !visible;
+            quickTextureTransform.style.display = visible ? 'flex' : 'none';
+        }
+        if (!visible) {
+            setQuickTextureAdvancedVisible(false, { force: true });
+        } else {
+            setQuickTextureAdvancedVisible(quickTextureAdvancedVisible, { force: true });
         }
 
         if (!selectedTexture) {
@@ -90,15 +119,27 @@ export function createTextureManager() {
             if (quickTextureOffsetY) quickTextureOffsetY.value = '0';
             if (quickTextureOffsetXValue) quickTextureOffsetXValue.textContent = '0.00';
             if (quickTextureOffsetYValue) quickTextureOffsetYValue.textContent = '0.00';
+            if (quickTextureScale) quickTextureScale.value = '1';
+            if (quickTextureScaleValue) quickTextureScaleValue.textContent = '1.00';
+            if (quickTextureRotation) quickTextureRotation.value = '0';
+            if (quickTextureRotationValue) quickTextureRotationValue.textContent = '0°';
             return;
         }
 
         const offsetX = selectedTexture.offset?.x ?? 0;
         const offsetY = selectedTexture.offset?.y ?? 0;
+        const repeatX = selectedTexture.repeat?.x ?? 1;
+        const repeatY = selectedTexture.repeat?.y ?? 1;
+        const uniformScale = (Math.abs(repeatX) + Math.abs(repeatY)) / 2;
+        const rotationInDegrees = THREE.MathUtils.radToDeg(selectedTexture.rotation ?? 0);
         if (quickTextureOffsetX) quickTextureOffsetX.value = offsetX.toFixed(2);
         if (quickTextureOffsetY) quickTextureOffsetY.value = offsetY.toFixed(2);
         if (quickTextureOffsetXValue) quickTextureOffsetXValue.textContent = offsetX.toFixed(2);
         if (quickTextureOffsetYValue) quickTextureOffsetYValue.textContent = offsetY.toFixed(2);
+        if (quickTextureScale) quickTextureScale.value = uniformScale.toFixed(2);
+        if (quickTextureScaleValue) quickTextureScaleValue.textContent = uniformScale.toFixed(2);
+        if (quickTextureRotation) quickTextureRotation.value = rotationInDegrees.toFixed(0);
+        if (quickTextureRotationValue) quickTextureRotationValue.textContent = `${rotationInDegrees.toFixed(0)}°`;
     }
 
     function notifySelectionChange(texture = null) {
@@ -114,11 +155,36 @@ export function createTextureManager() {
     }
 
     function updateSelectedTextureOffset(axis, rawValue) {
-        const selectedTexture = getSelectedTextureEntry()?.threeTexture ?? null;
+        const selectedTexture = activeTransformTexture ?? null;
         if (!selectedTexture || !selectedTexture.offset) return;
         const parsed = Number.parseFloat(rawValue);
         const value = Number.isFinite(parsed) ? parsed : 0;
         selectedTexture.offset[axis] = value;
+        selectedTexture.needsUpdate = true;
+        updateTransformControls();
+        notifyTransformChange(selectedTexture);
+    }
+
+    function updateSelectedTextureScale(rawValue) {
+        const selectedTexture = activeTransformTexture ?? null;
+        if (!selectedTexture || !selectedTexture.repeat) return;
+        const parsed = Number.parseFloat(rawValue);
+        const value = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+        selectedTexture.wrapS = THREE.RepeatWrapping;
+        selectedTexture.wrapT = THREE.RepeatWrapping;
+        selectedTexture.repeat.set(value, value);
+        selectedTexture.needsUpdate = true;
+        updateTransformControls();
+        notifyTransformChange(selectedTexture);
+    }
+
+    function updateSelectedTextureRotation(rawValue) {
+        const selectedTexture = activeTransformTexture ?? null;
+        if (!selectedTexture) return;
+        const parsed = Number.parseFloat(rawValue);
+        const degrees = Number.isFinite(parsed) ? parsed : 0;
+        selectedTexture.center.set(0.5, 0.5);
+        selectedTexture.rotation = THREE.MathUtils.degToRad(degrees);
         selectedTexture.needsUpdate = true;
         updateTransformControls();
         notifyTransformChange(selectedTexture);
@@ -327,6 +393,26 @@ export function createTextureManager() {
         });
     }
 
+    if (quickTextureScale) {
+        quickTextureScale.addEventListener('input', (event) => {
+            updateSelectedTextureScale(event.target.value);
+        });
+    }
+
+    if (quickTextureRotation) {
+        quickTextureRotation.addEventListener('input', (event) => {
+            updateSelectedTextureRotation(event.target.value);
+        });
+    }
+
+    if (quickTextureAdvancedToggle) {
+        quickTextureAdvancedToggle.addEventListener('click', () => {
+            if (quickTextureTransform?.hidden) return;
+            setQuickTextureAdvancedVisible(!quickTextureAdvancedVisible, { force: true });
+        });
+        updateAdvancedToggleLabel();
+    }
+
     renderLists();
 
     return {
@@ -351,6 +437,10 @@ export function createTextureManager() {
         setQuickApplyAvailable: (available) => {
             quickApplyAvailable = available;
             updateApplyButtons();
+        },
+        setActiveTransformTexture: (texture) => {
+            activeTransformTexture = texture ?? null;
+            updateTransformControls();
         },
         getSelectedTexture: () => {
             if (!selectedTextureId) return null;

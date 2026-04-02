@@ -10,10 +10,10 @@ Su trabajo principal es:
 - Traducir flechas y `WASD` a movimientos relativos a la cámara.
 - Crear líneas y puntos nuevos en modo líneas.
 - Colocar piezas del inventario en modo bloques con teclado.
-- Ignorar el movimiento de teclado cuando el modo activo depende del ratón, como `blocks-mouse`.
+- Ignorar el movimiento de teclado cuando el modo activo depende del ratón, como `blocks-mouse` y `blocks-pixel`.
 - Registrar acciones en undo/redo.
 - Gestionar `Delete` y `Backspace` para borrar vértices o todos los bloques seleccionados de una vez.
-- Gestionar `X` para borrar directamente el bloque que está bajo el cursor.
+- Gestionar `X` para borrar toda la selección actual de bloques/figuras (y si no hay selección, usa el bloque activo/hover).
 - Detectar cierres de bucles para pedir a `faces.js` que genere nuevas caras.
 
 El archivo mantiene la lógica de entrada separada de la escena y de la UI, lo que facilita cambiar controles sin tocar el renderizado.

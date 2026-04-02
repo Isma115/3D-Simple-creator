@@ -12,7 +12,10 @@ Puntos clave:
 - Mantiene un sistema de heartbeat para apagar el servidor si la app deja de responder o se cierra.
 - Cuando `pywebview` está disponible, abre la URL local dentro de una ventana nativa maximizada y fuerza un fondo negro desde el primer fotograma para evitar el destello blanco inicial.
 - Construye menús nativos de `Archivo`, `Edición`, `Inventario` y `Ver`.
+- En macOS aplica un ajuste posterior para poner `Archivo`, `Edicion`, `Inventario` y `Ver` al principio de la barra nativa, por delante de entradas por defecto; además intenta retirar los menús por defecto `Edit` y `View` para evitar duplicados.
 - Los menús envían eventos personalizados al frontend usando `window.evaluate_js(...)`, así que la lógica real sigue centralizada en JavaScript.
+- El puente `DesktopBridge` usa la API moderna `webview.FileDialog.SAVE` para guardar archivos y evitar el warning deprecado de `SAVE_DIALOG`.
+- El mismo puente añade `open_project_file()` para abrir proyectos desde selector nativo (`.s3dc` / `.json`) y enviar el contenido al frontend en Base64, mejorando la carga de proyectos en escritorio.
 - `Archivo` expone guardar proyecto, cargar proyecto, cargar `OBJ`, cargar `FBX`, exportar `GLB` y exportar `OBJ`.
 - `Edición` agrupa limpiar líneas, fusionar bloques, fusionar selección y abrir `Editar UV`.
 

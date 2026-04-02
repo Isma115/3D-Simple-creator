@@ -30,6 +30,6 @@ Este archivo resume, en lenguaje no técnico, las funciones principales de la ap
 - Mostrar u ocultar los FPS desde el menú `Ver`.
 - Dejar la zona de información solo para el contador de FPS cuando está activado.
 - Mostrar una ayuda rápida todavía más compacta, solo con texto plano.
-- Cambiar el tipo de control con `Ctrl + rueda`.
+- Cambiar el tipo de control con `Ctrl + rueda` o `Mayus + rueda`.
 - Ejecutar la app como ventana de escritorio con menús nativos del sistema y abrirla maximizada.
 - Evitar que un arrastre de camara se interprete como clic de deseleccion.

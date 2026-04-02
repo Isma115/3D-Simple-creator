@@ -54,7 +54,10 @@ const getCurrentUvSession = () => {
 };
 
 const refreshTextureTools = () => {
-    textureManager.setQuickApplyAvailable(selectionManager?.hasUvTarget?.('selection') ?? false);
+    const hasSelectionUvTarget = selectionManager?.hasUvTarget?.('selection') ?? false;
+    const selectionTexture = selectionManager?.getTargetTexture?.('selection') ?? null;
+    textureManager.setQuickApplyAvailable(hasSelectionUvTarget);
+    textureManager.setActiveTransformTexture(selectionTexture);
 
     if (!ui.isTextureManagerVisible()) {
         return;
@@ -69,7 +72,11 @@ const refreshTextureTools = () => {
 };
 
 const updateUI = () => {
-    const hideCursorForBlockModes = state.controlMode === 'blocks-keyboard' || state.controlMode === 'blocks-mouse';
+    const hideCursorForBlockModes = (
+        state.controlMode === 'blocks-keyboard'
+        || state.controlMode === 'blocks-mouse'
+        || state.controlMode === 'blocks-pixel'
+    );
     const visibleVertices = computeVisibleVertices(state);
     state.cursorMesh.visible = !hideCursorForBlockModes;
     entryManager.applyLooseFaceVisibility(state.looseFaceVertices);
@@ -186,6 +193,7 @@ selectionManager = attachSelection({
 });
 
 attachMouseBlockControls({
+    scene,
     camera,
     renderer,
     state,
@@ -304,7 +312,7 @@ textureManager.onSelectionChange(() => {
 });
 textureManager.onTransformChange((texture) => {
     if (!texture) return;
-    selectionManager?.updateTextureTransform?.(getCurrentTextureScope(), texture);
+    selectionManager?.updateTextureTransform?.('selection', texture);
     refreshTextureTools();
 });
 

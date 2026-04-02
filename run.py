@@ -16,6 +16,7 @@ except ImportError:
     MenuAction = None
 else:
     from webview.menu import Menu, MenuAction
+    webview.settings['SHOW_DEFAULT_MENUS'] = False
 
 # Tiempo máximo sin recibir un latido (heartbeat) antes de apagar el servidor
 TIMEOUT_SECONDS = 5
@@ -109,8 +110,9 @@ class DesktopBridge:
         if not window:
             return {'saved': False, 'error': 'Ventana no disponible.'}
 
+        save_dialog = webview.FileDialog.SAVE if hasattr(webview, 'FileDialog') else webview.SAVE_DIALOG
         destination = window.create_file_dialog(
-            webview.SAVE_DIALOG,
+            save_dialog,
             save_filename=suggested_name,
             file_types=(file_type,)
         )
@@ -128,6 +130,38 @@ class DesktopBridge:
             return {'saved': False, 'error': str(error)}
 
         return {'saved': True, 'path': target_path}
+
+    def open_project_file(self):
+        window = self.window_holder.get('window')
+        if not window:
+            return {'opened': False, 'error': 'Ventana no disponible.'}
+
+        open_dialog = webview.FileDialog.OPEN if hasattr(webview, 'FileDialog') else webview.OPEN_DIALOG
+        destination = window.create_file_dialog(
+            open_dialog,
+            allow_multiple=False,
+            file_types=(
+                'Proyecto Simple3D (*.s3dc;*.json)',
+                'Todos los archivos (*.*)'
+            )
+        )
+
+        if not destination:
+            return {'opened': False, 'cancelled': True}
+
+        target_path = destination[0] if isinstance(destination, (list, tuple)) else destination
+        try:
+            with open(target_path, 'rb') as file_handle:
+                content = file_handle.read()
+        except Exception as error:
+            return {'opened': False, 'error': str(error)}
+
+        return {
+            'opened': True,
+            'path': target_path,
+            'name': os.path.basename(target_path),
+            'contentBase64': base64.b64encode(content).decode('ascii')
+        }
 
 
 def create_native_menu(window_holder):
@@ -190,8 +224,7 @@ def run_desktop_window(port, httpd):
         height=960,
         maximized=True,
         min_size=(1100, 700),
-        background_color='#000000',
-        menu=menus
+        background_color='#000000'
     )
     window_holder['window'] = window
 
@@ -205,7 +238,7 @@ def run_desktop_window(port, httpd):
     window.events.closed += handle_window_closed
     window.events.loaded += handle_window_loaded
     print(f"Abriendo ventana de escritorio en: {url}")
-    webview.start()
+    webview.start(menu=menus)
 
 def main():
     global server_running, last_heartbeat

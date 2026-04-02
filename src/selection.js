@@ -4,7 +4,8 @@ import { FACE_EPSILON, STEP_SIZE } from './constants.js';
 import { drawLineBetweenPoints } from './input.js';
 
 const FACE_HOVER_EMISSIVE = 0x7ee8a0;
-const FACE_SELECTED_EMISSIVE = 0x1fb655;
+const FACE_SELECTED_EMISSIVE = 0x78ffad;
+const FACE_SELECTED_OPACITY = 0.66;
 
 function getSelectedFaces(state) {
     if (!state.selectedFace) return [];
@@ -570,13 +571,31 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     joinAction.type = 'button';
     joinAction.textContent = 'Unir';
     joinMenu.appendChild(joinAction);
+    const createBorderAction = document.createElement('button');
+    createBorderAction.type = 'button';
+    createBorderAction.textContent = 'Crear borde';
+    joinMenu.appendChild(createBorderAction);
     document.body.appendChild(joinMenu);
+    const faceMenu = document.createElement('div');
+    faceMenu.className = 'context-menu';
+    faceMenu.style.display = 'none';
+    const selectHorizontalAction = document.createElement('button');
+    selectHorizontalAction.type = 'button';
+    selectHorizontalAction.textContent = 'Seleccionar todos (horizontal)';
+    faceMenu.appendChild(selectHorizontalAction);
+    const selectVerticalAction = document.createElement('button');
+    selectVerticalAction.type = 'button';
+    selectVerticalAction.textContent = 'Seleccionar todos (vertical)';
+    faceMenu.appendChild(selectVerticalAction);
+    document.body.appendChild(faceMenu);
     const DRAG_SCALE = STEP_SIZE / 50;
+    const CLICK_DRAG_THRESHOLD_SQ = 36;
     let dragState = null;
     let clickDragState = null;
     let suppressClick = false;
     let hoveredFacePreviewMeshes = [];
     let selectedFacePreviewMeshes = [];
+    let faceContextTarget = null;
 
     function updateMouse(event) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -618,9 +637,10 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
     function pickBlockEntry() {
         if (!blockManager) return null;
-        const entries = blockManager.getBlockEntries().filter((entry) => entry.active);
-        if (entries.length === 0) return null;
-        const meshes = entries.map((entry) => entry.mesh);
+        const meshes = blockManager.getActiveBlockMeshes
+            ? blockManager.getActiveBlockMeshes()
+            : blockManager.getBlockEntries().filter((entry) => entry.active).map((entry) => entry.mesh);
+        if (meshes.length === 0) return null;
         raycaster.setFromCamera(mouse, camera);
         const hits = raycaster.intersectObjects(meshes, false);
         if (hits.length === 0) return null;
@@ -709,6 +729,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function showJoinMenu(x, y) {
+        createBorderAction.disabled = state.selectedPointKeys.length !== 2;
         joinMenu.style.left = `${x}px`;
         joinMenu.style.top = `${y}px`;
         joinMenu.style.display = 'block';
@@ -716,6 +737,20 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
     function hideJoinMenu() {
         joinMenu.style.display = 'none';
+    }
+
+    function showFaceMenu(x, y, face) {
+        faceContextTarget = face ?? null;
+        selectHorizontalAction.disabled = !faceContextTarget;
+        selectVerticalAction.disabled = !faceContextTarget;
+        faceMenu.style.left = `${x}px`;
+        faceMenu.style.top = `${y}px`;
+        faceMenu.style.display = faceContextTarget ? 'block' : 'none';
+    }
+
+    function hideFaceMenu() {
+        faceContextTarget = null;
+        faceMenu.style.display = 'none';
     }
 
     function clearFacePreviewMeshes(meshes) {
@@ -801,14 +836,16 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         
         // 3. Block faces (each block is a mesh)
         if (blockManager) {
-            for (const entry of blockManager.getBlockEntries()) {
-                if (entry.active && entry.mesh) {
-                    planeMeshes.push(entry.mesh);
-                    planeByMesh.set(entry.mesh, {
-                        type: entry.geometryType === 'merged-cube' ? 'merged-block' : 'block',
-                        entry
-                    });
-                }
+            const activeBlocks = blockManager.getActiveBlockEntries
+                ? blockManager.getActiveBlockEntries()
+                : blockManager.getBlockEntries().filter((entry) => entry.active);
+            for (const entry of activeBlocks) {
+                if (!entry.mesh) continue;
+                planeMeshes.push(entry.mesh);
+                planeByMesh.set(entry.mesh, {
+                    type: entry.geometryType === 'merged-cube' ? 'merged-block' : 'block',
+                    entry
+                });
             }
         }
 
@@ -1096,7 +1133,9 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         const planePoint = a.clone().applyMatrix4(startMesh.matrixWorld);
         const planeD = worldNormal.dot(planePoint);
         
-        const allBlocks = blockManager.getBlockEntries().filter((entry) => entry.active);
+        const allBlocks = blockManager.getActiveBlockEntries
+            ? blockManager.getActiveBlockEntries()
+            : blockManager.getBlockEntries().filter((entry) => entry.active);
         const jointSelectionType = document.querySelector('input[name="joint-face-selection-type"]:checked')?.value ?? 'type-2';
         const candidates = getCoplanarBlockFaceCandidates(allBlocks, worldNormal, planeD);
 
@@ -1200,8 +1239,11 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         normal.crossVectors(c.clone().sub(b), a.clone().sub(b)).normalize();
 
         const samplePoint = center.clone().add(normal.multiplyScalar(0.01));
-        return !blockManager.getBlockEntries().some((candidate) => {
-            if (!candidate.active || candidate === entry) return false;
+        const activeEntries = blockManager.getActiveBlockEntries
+            ? blockManager.getActiveBlockEntries()
+            : blockManager.getBlockEntries().filter((candidate) => candidate.active);
+        return !activeEntries.some((candidate) => {
+            if (candidate === entry) return false;
             return isPointInsideBlock(samplePoint, candidate);
         });
     }
@@ -1249,50 +1291,117 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         return edges;
     }
 
-    function getNeighborFaceSelection(nextFace, depth) {
+    function faceCandidateToSelection(candidate) {
+        return {
+            mesh: candidate.mesh,
+            data: { type: 'block', entry: candidate.entry },
+            faceIndex: candidate.faceIndex
+        };
+    }
+
+    function getBlockFacePlaneData(face) {
+        const mesh = face?.mesh;
+        const positions = mesh?.geometry?.attributes?.position;
+        const index = mesh?.geometry?.index;
+        if (!mesh || !positions || !index) return null;
+
+        const baseFaceIndex = getBlockMaterialIndex(face) * 2;
+        const triangleBase = baseFaceIndex * 3;
+        if ((triangleBase + 2) >= index.count) return null;
+
+        const normal = new THREE.Vector3();
+        const a = new THREE.Vector3().fromBufferAttribute(positions, index.getX(triangleBase));
+        const b = new THREE.Vector3().fromBufferAttribute(positions, index.getX(triangleBase + 1));
+        const c = new THREE.Vector3().fromBufferAttribute(positions, index.getX(triangleBase + 2));
+        normal.crossVectors(c.clone().sub(b), a.clone().sub(b)).normalize();
+
+        const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+        const worldNormal = normal.clone().applyMatrix3(normalMatrix).normalize();
+        const worldPoint = a.clone().applyMatrix4(mesh.matrixWorld);
+        const planeD = worldNormal.dot(worldPoint);
+
+        return { worldNormal, planeD };
+    }
+
+    function getFaceGridSelectionData(nextFace) {
         const entry = nextFace?.data?.entry;
         if (!nextFace || !entry || entry.geometryType !== 'cube' || isImportedBlockFace(nextFace) || !blockManager) {
+            return null;
+        }
+
+        const plane = getBlockFacePlaneData(nextFace);
+        if (!plane) return null;
+
+        const activeCubeEntries = (blockManager.getActiveBlockEntries
+            ? blockManager.getActiveBlockEntries()
+            : blockManager.getBlockEntries().filter((candidate) => candidate.active))
+            .filter((candidate) => candidate.geometryType === 'cube');
+        const candidates = getCoplanarBlockFaceCandidates(
+            activeCubeEntries,
+            plane.worldNormal,
+            plane.planeD
+        );
+        const startCandidate = candidates.find((candidate) => candidate.mesh === nextFace.mesh);
+        if (!startCandidate) return null;
+
+        return { candidates, startCandidate };
+    }
+
+    function getDirectionalFaceSelection(nextFace, direction = 'horizontal') {
+        const gridData = getFaceGridSelectionData(nextFace);
+        if (!gridData) {
             return nextFace ? [nextFace] : [];
         }
 
-        const normal = new THREE.Vector3();
-        const positions = nextFace.mesh.geometry.attributes.position;
-        const index = nextFace.mesh.geometry.index;
-        const baseFaceIndex = getBlockMaterialIndex(nextFace) * 2;
-        const a = new THREE.Vector3().fromBufferAttribute(positions, index.getX(baseFaceIndex * 3));
-        const b = new THREE.Vector3().fromBufferAttribute(positions, index.getX(baseFaceIndex * 3 + 1));
-        const c = new THREE.Vector3().fromBufferAttribute(positions, index.getX(baseFaceIndex * 3 + 2));
-        normal.crossVectors(c.clone().sub(b), a.clone().sub(b)).normalize();
-
-        const normalMatrix = new THREE.Matrix3().getNormalMatrix(nextFace.mesh.matrixWorld);
-        const worldNormal = normal.clone().applyMatrix3(normalMatrix).normalize();
-        const planePoint = a.clone().applyMatrix4(nextFace.mesh.matrixWorld);
-        const planeD = worldNormal.dot(planePoint);
-        const candidates = getCoplanarBlockFaceCandidates(
-            blockManager.getBlockEntries().filter((candidate) => candidate.active && candidate.geometryType === 'cube'),
-            worldNormal,
-            planeD
-        );
-        const startCandidate = candidates.find((candidate) => candidate.mesh === nextFace.mesh);
-        if (!startCandidate) {
-            return [nextFace];
+        const { candidates, startCandidate } = gridData;
+        const uniformGrid = buildUniformFaceGrid(candidates, startCandidate.bounds);
+        if (!uniformGrid) {
+            return [faceCandidateToSelection(startCandidate)];
         }
 
+        const startCell = uniformGrid.map.get('0,0');
+        if (!startCell) {
+            return [faceCandidateToSelection(startCandidate)];
+        }
+
+        const selectedCandidates = [startCell];
+
+        if (direction === 'vertical') {
+            for (let row = startCell.row - 1; uniformGrid.map.has(`${startCell.col},${row}`); row -= 1) {
+                selectedCandidates.push(uniformGrid.map.get(`${startCell.col},${row}`));
+            }
+            for (let row = startCell.row + 1; uniformGrid.map.has(`${startCell.col},${row}`); row += 1) {
+                selectedCandidates.push(uniformGrid.map.get(`${startCell.col},${row}`));
+            }
+        } else {
+            for (let col = startCell.col - 1; uniformGrid.map.has(`${col},${startCell.row}`); col -= 1) {
+                selectedCandidates.push(uniformGrid.map.get(`${col},${startCell.row}`));
+            }
+            for (let col = startCell.col + 1; uniformGrid.map.has(`${col},${startCell.row}`); col += 1) {
+                selectedCandidates.push(uniformGrid.map.get(`${col},${startCell.row}`));
+            }
+        }
+
+        return selectedCandidates
+            .filter(Boolean)
+            .map((candidate) => faceCandidateToSelection(candidate));
+    }
+
+    function getNeighborFaceSelection(nextFace, depth) {
+        const gridData = getFaceGridSelectionData(nextFace);
+        if (!gridData) {
+            return nextFace ? [nextFace] : [];
+        }
+
+        const { candidates, startCandidate } = gridData;
+
         if (depth <= 0) {
-            return [{
-                mesh: startCandidate.mesh,
-                data: { type: 'block', entry: startCandidate.entry },
-                faceIndex: startCandidate.faceIndex
-            }];
+            return [faceCandidateToSelection(startCandidate)];
         }
 
         const uniformGrid = buildUniformFaceGrid(candidates, startCandidate.bounds);
         if (!uniformGrid) {
-            return [{
-                mesh: startCandidate.mesh,
-                data: { type: 'block', entry: startCandidate.entry },
-                faceIndex: startCandidate.faceIndex
-            }];
+            return [faceCandidateToSelection(startCandidate)];
         }
 
         const selectedCandidates = [];
@@ -1303,11 +1412,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             selectedCandidates.push(candidate);
         }
 
-        return selectedCandidates.map((candidate) => ({
-            mesh: candidate.mesh,
-            data: { type: 'block', entry: candidate.entry },
-            faceIndex: candidate.faceIndex
-        }));
+        return selectedCandidates.map((candidate) => faceCandidateToSelection(candidate));
     }
 
     function handleFaceHover(nextFace) {
@@ -1341,7 +1446,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (!nextFace) {
             if (existingFaces.length > 0) {
                 state.selectedFace = existingFaces;
-                setFacePreviewMeshes(selectedFacePreviewMeshes, existingFaces, FACE_SELECTED_EMISSIVE, 0.52);
+                setFacePreviewMeshes(selectedFacePreviewMeshes, existingFaces, FACE_SELECTED_EMISSIVE, FACE_SELECTED_OPACITY);
             }
             handleFaceHover(state.hoveredFace?.[0] ?? null);
             onUpdate();
@@ -1360,9 +1465,205 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             : facesToSelect;
 
         state.selectedFace = finalSelection;
-        setFacePreviewMeshes(selectedFacePreviewMeshes, finalSelection, FACE_SELECTED_EMISSIVE, 0.52);
+        setFacePreviewMeshes(selectedFacePreviewMeshes, finalSelection, FACE_SELECTED_EMISSIVE, FACE_SELECTED_OPACITY);
         handleFaceHover(nextFace);
         onUpdate();
+    }
+
+    function applyDirectionalFaceSelection(direction) {
+        const sourceFace = faceContextTarget ?? state.hoveredFace?.[0] ?? getSelectedFaces(state)[0] ?? null;
+        if (!sourceFace) {
+            hideFaceMenu();
+            return;
+        }
+        const faces = getDirectionalFaceSelection(sourceFace, direction);
+        state.selectedFace = faces;
+        clearFacePreviewMeshes(selectedFacePreviewMeshes);
+        setFacePreviewMeshes(selectedFacePreviewMeshes, faces, FACE_SELECTED_EMISSIVE, FACE_SELECTED_OPACITY);
+        handleFaceHover(sourceFace);
+        hideFaceMenu();
+        onUpdate();
+    }
+
+    function isFaceDeleteShortcut(event) {
+        const deleteKeys = new Set(['Delete', 'Backspace', 'Del', 'Supr']);
+        const normalizedKey = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+        return (
+            deleteKeys.has(event.key)
+            || deleteKeys.has(event.code)
+            || normalizedKey === 'x'
+            || event.code === 'KeyX'
+        );
+    }
+
+    function resolveFaceMaterialIndex(face) {
+        const geometry = face?.mesh?.geometry;
+        if (geometry?.groups?.length && typeof face?.faceIndex === 'number') {
+            const triangleStart = face.faceIndex * 3;
+            const group = geometry.groups.find((candidate) => (
+                triangleStart >= candidate.start
+                && triangleStart < (candidate.start + candidate.count)
+            ));
+            if (group && Number.isInteger(group.materialIndex)) {
+                return group.materialIndex;
+            }
+        }
+        return getBlockMaterialIndex(face);
+    }
+
+    function hideFaceMaterial(face) {
+        const mesh = face?.mesh;
+        if (!mesh?.material || shouldTreatFaceAsWholeMesh(face)) return false;
+
+        ensureEditableBlockMaterials(mesh);
+        if (!Array.isArray(mesh.material) || mesh.material.length === 0) return false;
+
+        const materialIndex = resolveFaceMaterialIndex(face);
+        if (!Number.isInteger(materialIndex) || materialIndex < 0 || materialIndex >= mesh.material.length) {
+            return false;
+        }
+
+        const currentMaterial = mesh.material[materialIndex];
+        if (!currentMaterial) return false;
+        if (currentMaterial.visible === false && currentMaterial.opacity <= 0.001) {
+            return false;
+        }
+
+        const nextMaterial = currentMaterial.clone();
+        nextMaterial.visible = false;
+        nextMaterial.transparent = true;
+        nextMaterial.opacity = 0;
+        nextMaterial.depthWrite = false;
+        nextMaterial.map = null;
+        if (nextMaterial.emissive) {
+            nextMaterial.emissive.setHex(0x000000);
+        }
+        nextMaterial.needsUpdate = true;
+        mesh.material[materialIndex] = nextMaterial;
+        return true;
+    }
+
+    function deletePlaneFace(face, affectedPlaneKeys) {
+        if (!face?.mesh) return false;
+        let matchedKey = null;
+        let matchedPlane = null;
+
+        for (const [planeKey, planeData] of state.planeFill.entries()) {
+            if (!planeData) continue;
+            if (planeData === face.data?.data || planeData.mesh === face.mesh) {
+                matchedKey = planeKey;
+                matchedPlane = planeData;
+                break;
+            }
+        }
+
+        if (!matchedPlane && face.data?.data) {
+            matchedPlane = face.data.data;
+        }
+        if (!matchedPlane) return false;
+
+        if (matchedPlane.mesh) scene.remove(matchedPlane.mesh);
+        if (matchedPlane.gridLines) scene.remove(matchedPlane.gridLines);
+
+        if (matchedKey) {
+            state.planeFill.delete(matchedKey);
+            affectedPlaneKeys.add(matchedKey);
+        } else {
+            for (const [planeKey, planeData] of state.planeFill.entries()) {
+                if (planeData?.mesh !== matchedPlane.mesh) continue;
+                state.planeFill.delete(planeKey);
+                affectedPlaneKeys.add(planeKey);
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    function deleteLooseFace(face) {
+        if (!face?.mesh) return false;
+        let matchedKey = null;
+        if (typeof face.data?.key === 'string' && state.looseFaceMeshes.has(face.data.key)) {
+            matchedKey = face.data.key;
+        } else {
+            for (const [faceKey, mesh] of state.looseFaceMeshes.entries()) {
+                if (mesh !== face.mesh) continue;
+                matchedKey = faceKey;
+                break;
+            }
+        }
+        if (!matchedKey) return false;
+
+        const mesh = state.looseFaceMeshes.get(matchedKey) ?? face.mesh;
+        scene.remove(mesh);
+        state.looseFaceMeshes.delete(matchedKey);
+        state.looseFaceVertices.delete(matchedKey);
+        state.faceRegistry.delete(matchedKey);
+        return true;
+    }
+
+    function deleteFaceEntry(face, affectedPlaneKeys) {
+        const faceType = face?.data?.type;
+        if (faceType === 'plane') {
+            return deletePlaneFace(face, affectedPlaneKeys);
+        }
+        if (faceType === 'loose') {
+            return deleteLooseFace(face);
+        }
+        if (faceType === 'block') {
+            return hideFaceMaterial(face);
+        }
+        return false;
+    }
+
+    function deleteSelectedFaces() {
+        const selectedFaces = mergeUniqueFaces(getSelectedFaces(state));
+        if (selectedFaces.length === 0) return false;
+
+        const affectedPlaneKeys = new Set();
+        let changed = false;
+        for (const face of selectedFaces) {
+            if (deleteFaceEntry(face, affectedPlaneKeys)) {
+                changed = true;
+            }
+        }
+        if (!changed) return false;
+
+        for (const planeKey of affectedPlaneKeys) {
+            entryManager.updatePlaneVisibility(planeKey);
+        }
+
+        hideFaceMenu();
+        state.selectedFace = null;
+        state.hoveredFace = null;
+        clearFacePreviewMeshes(selectedFacePreviewMeshes);
+        clearFacePreviewMeshes(hoveredFacePreviewMeshes);
+        onUpdate();
+        return true;
+    }
+
+    function onFaceKeyDown(event) {
+        if (state.workMode !== 'classic') return;
+        if (state.controlMode !== 'select-face' && state.controlMode !== 'select-face-neighbors') return;
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+        const target = event.target;
+        if (
+            target
+            && (
+                target.isContentEditable
+                || target.tagName === 'INPUT'
+                || target.tagName === 'TEXTAREA'
+                || target.tagName === 'SELECT'
+            )
+        ) {
+            return;
+        }
+        if (!isFaceDeleteShortcut(event)) return;
+        if (getSelectedFaces(state).length === 0) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        deleteSelectedFaces();
     }
 
     function getUvTargets(scope = 'selection') {
@@ -1391,8 +1692,11 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             }
 
             if (blockManager) {
-                for (const entry of blockManager.getBlockEntries()) {
-                    if (!entry.active || !entry.mesh || seenMeshes.has(entry.mesh.uuid)) continue;
+                const activeBlocks = blockManager.getActiveBlockEntries
+                    ? blockManager.getActiveBlockEntries()
+                    : blockManager.getBlockEntries().filter((entry) => entry.active);
+                for (const entry of activeBlocks) {
+                    if (!entry.mesh || seenMeshes.has(entry.mesh.uuid)) continue;
                     seenMeshes.add(entry.mesh.uuid);
                     targets.push({
                         mesh: entry.mesh,
@@ -1480,6 +1784,96 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
                 startPoint: startItem.position,
                 endPoint: endItem.position,
                 pathBeforeOverride
+            });
+            if (created) {
+                createdAny = true;
+            }
+        }
+
+        clearPointSelection({ clearActive: true, notify: true });
+        return createdAny;
+    }
+
+    function getSelectedPointPositions() {
+        return state.selectedPointKeys
+            .map((key) => getPointPositionByKey(key))
+            .filter(Boolean);
+    }
+
+    function getBorderRadiusValue() {
+        const input = document.getElementById('border-radius-input');
+        const parsed = Number.parseFloat(input?.value ?? '0.5');
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            return 0.5;
+        }
+        return parsed;
+    }
+
+    function buildBorderLoopPoints(start, end, radius) {
+        const segment = end.clone().sub(start);
+        if (segment.lengthSq() <= 1e-8) {
+            return null;
+        }
+
+        const tangent = segment.normalize();
+        const viewForward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+        const worldUp = new THREE.Vector3(0, 1, 0);
+        const worldRight = new THREE.Vector3(1, 0, 0);
+
+        let planeNormal = viewForward.clone();
+        if (Math.abs(planeNormal.dot(tangent)) > 0.94) {
+            planeNormal = worldUp;
+        }
+
+        let side = new THREE.Vector3().crossVectors(tangent, planeNormal).normalize();
+        if (side.lengthSq() <= 1e-8) {
+            side = new THREE.Vector3().crossVectors(tangent, worldRight).normalize();
+        }
+        if (side.lengthSq() <= 1e-8) {
+            side = new THREE.Vector3().crossVectors(tangent, worldUp).normalize();
+        }
+        if (side.lengthSq() <= 1e-8) {
+            return null;
+        }
+
+        const offset = side.multiplyScalar(radius);
+        const startA = start.clone().add(offset);
+        const startB = start.clone().sub(offset);
+        const endA = end.clone().add(offset);
+        const endB = end.clone().sub(offset);
+
+        return [startA, endA, endB, startB, startA];
+    }
+
+    function createBorderFromSelectedPoints() {
+        if (state.controlMode !== 'lines') return false;
+        const selectedPositions = getSelectedPointPositions();
+        if (selectedPositions.length !== 2) {
+            alert('Para crear borde selecciona exactamente dos puntos.');
+            return false;
+        }
+
+        const radius = getBorderRadiusValue();
+        const loopPoints = buildBorderLoopPoints(selectedPositions[0], selectedPositions[1], radius);
+        if (!loopPoints) {
+            return false;
+        }
+
+        let createdAny = false;
+        for (let index = 0; index < loopPoints.length - 1; index += 1) {
+            const startPoint = loopPoints[index];
+            const endPoint = loopPoints[index + 1];
+            const created = drawLineBetweenPoints({
+                state,
+                entryManager,
+                faceController,
+                graphManager,
+                blockManager,
+                undoManager,
+                onUpdate,
+                startPoint,
+                endPoint,
+                pathBeforeOverride: [startPoint.clone()]
             });
             if (created) {
                 createdAny = true;
@@ -1744,6 +2138,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleGridHover(null);
             handleFaceHover(null);
             hideJoinMenu();
+            hideFaceMenu();
             hideLinePreview();
             return;
         }
@@ -1751,7 +2146,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (clickDragState && (event.buttons & 1) !== 0) {
             const dx = event.clientX - clickDragState.startX;
             const dy = event.clientY - clickDragState.startY;
-            if ((dx * dx) + (dy * dy) > 16) {
+            if ((dx * dx) + (dy * dy) > CLICK_DRAG_THRESHOLD_SQ) {
                 clickDragState.moved = true;
             }
         }
@@ -1773,6 +2168,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             return;
         }
 
+        hideFaceMenu();
         if (state.controlMode !== 'lines') {
             const blockEntry = pickBlockEntry();
             handleBlockHover(blockEntry);
@@ -1801,6 +2197,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     function onClick(event) {
         if (state.workMode !== 'classic') {
             hideJoinMenu();
+            hideFaceMenu();
             hideLinePreview();
             return;
         }
@@ -1812,6 +2209,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         
         if (state.controlMode === 'select-face' || state.controlMode === 'select-face-neighbors') {
             hideJoinMenu();
+            hideFaceMenu();
             hideLinePreview();
             const face = pickFace();
             handleFaceSelect(face, event);
@@ -1820,6 +2218,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
 
         if (state.controlMode === 'blocks-keyboard') {
             hideJoinMenu();
+            hideFaceMenu();
             hideLinePreview();
             const blockEntry = pickBlockEntry();
             handleBlockSelect(blockEntry, event);
@@ -1827,8 +2226,9 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
             handleGridHover(null);
             return;
         }
-        if (state.controlMode === 'blocks-mouse') {
+        if (state.controlMode === 'blocks-mouse' || state.controlMode === 'blocks-pixel') {
             hideJoinMenu();
+            hideFaceMenu();
             hideLinePreview();
             handleBlockHover(null);
             handleGridHover(null);
@@ -1838,6 +2238,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (event.shiftKey) {
             if (!entry) {
                 hideJoinMenu();
+                hideFaceMenu();
                 return;
             }
             addPointToSelection(entry);
@@ -1848,12 +2249,14 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         }
         if (entry) {
             hideJoinMenu();
+            hideFaceMenu();
             handleSelect(entry);
             handleGridHover(null);
             handleLinePreview(entry.position);
             return;
         }
         hideJoinMenu();
+        hideFaceMenu();
         const gridPoint = pickGridPoint();
         handleGridSelect(gridPoint);
         handleGridHover(null);
@@ -1863,12 +2266,30 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     function onContextMenu(event) {
         if (state.workMode !== 'classic') {
             hideJoinMenu();
+            hideFaceMenu();
             return;
         }
+
+        if (state.controlMode === 'select-face' || state.controlMode === 'select-face-neighbors') {
+            event.preventDefault();
+            updateMouse(event);
+            const face = pickFace();
+            if (!face) {
+                hideFaceMenu();
+                return;
+            }
+            handleFaceSelect(face);
+            showFaceMenu(event.clientX + 6, event.clientY + 6, face);
+            hideJoinMenu();
+            return;
+        }
+
+        hideFaceMenu();
         if (state.controlMode !== 'lines') {
             hideJoinMenu();
             return;
         }
+
         if (state.selectedPointKeys.length < 2) {
             hideJoinMenu();
             event.preventDefault();
@@ -1879,9 +2300,12 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
     }
 
     function onDocumentPointerDown(event) {
-        if (joinMenu.style.display === 'none') return;
-        if (joinMenu.contains(event.target)) return;
-        hideJoinMenu();
+        if (joinMenu.style.display !== 'none' && !joinMenu.contains(event.target)) {
+            hideJoinMenu();
+        }
+        if (faceMenu.style.display !== 'none' && !faceMenu.contains(event.target)) {
+            hideFaceMenu();
+        }
     }
 
     function onDocumentClick(event) {
@@ -1893,6 +2317,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         }
         if (dragState) return;
         if (joinMenu.contains(event.target)) return;
+        if (faceMenu.contains(event.target)) return;
         if (state.selectedPointKeys.length === 0) return;
         clearPointSelection({ clearActive: true, notify: true });
     }
@@ -1901,19 +2326,31 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (state.workMode !== 'classic') return;
         if (event.button !== 0) return;
         clickDragState = {
+            pointerId: event.pointerId,
             startX: event.clientX,
             startY: event.clientY,
             moved: false
         };
     }
 
-    function onPointerUp(event) {
-        if (clickDragState) {
-            if (clickDragState.moved) {
-                suppressClick = true;
-            }
-            clickDragState = null;
+    function clearClickDragState(pointerId = null) {
+        if (!clickDragState) return;
+        if (pointerId !== null && clickDragState.pointerId !== pointerId) return;
+        if (clickDragState.moved) {
+            suppressClick = true;
         }
+        clickDragState = null;
+    }
+
+    function onPointerUp(event) {
+        if (clickDragState && (event.pointerId ?? null) === clickDragState.pointerId) {
+            const dx = event.clientX - clickDragState.startX;
+            const dy = event.clientY - clickDragState.startY;
+            if ((dx * dx) + (dy * dy) > CLICK_DRAG_THRESHOLD_SQ) {
+                clickDragState.moved = true;
+            }
+        }
+        clearClickDragState(event.pointerId ?? null);
         if (!dragState) return;
         const moved = Math.abs(event.clientY - dragState.startMouseY) > 2;
         suppressClick = moved;
@@ -1922,11 +2359,19 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         event.stopPropagation();
     }
 
+    function onPointerCancel(event) {
+        clearClickDragState(event.pointerId ?? null);
+    }
+
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('click', onClick);
     renderer.domElement.addEventListener('contextmenu', onContextMenu);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onPointerCancel);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+    window.addEventListener('keydown', onFaceKeyDown, true);
     document.addEventListener('pointerdown', onDocumentPointerDown);
     document.addEventListener('click', onDocumentClick, true);
 
@@ -1934,6 +2379,17 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
         if (!joinSelectedPoints()) {
             hideJoinMenu();
         }
+    });
+    createBorderAction.addEventListener('click', () => {
+        if (!createBorderFromSelectedPoints()) {
+            hideJoinMenu();
+        }
+    });
+    selectHorizontalAction.addEventListener('click', () => {
+        applyDirectionalFaceSelection('horizontal');
+    });
+    selectVerticalAction.addEventListener('click', () => {
+        applyDirectionalFaceSelection('vertical');
     });
 
     return {
@@ -1950,6 +2406,7 @@ export function attachSelection({ camera, renderer, entryManager, blockManager, 
                 state.hoveredBlock = null;
             }
             hideJoinMenu();
+            hideFaceMenu();
             handleFaceSelect(null);
             handleFaceHover(null);
             clearFacePreviewMeshes(hoveredFacePreviewMeshes);

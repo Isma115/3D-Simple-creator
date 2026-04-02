@@ -25,3 +25,7 @@ Se vale de exportadores provistos por Three.js mediante sus módulos *addons* of
 - `OBJExporter` (`three/addons/exporters/OBJExporter.js`) + **Generador MTL + JSZip**: El exportador oficial de OBJ de Three.js genera la malla en texto. El módulo `export.js` recorre la malla posteriormente recolectando todos sus materiales. Luego genera el texto gramatical de un fichero `.mtl` dinámico para mapear cada material y dibuja la textura de la imagen original en un `canvas` temporal que es transformado a formato `.png`. Finalmente, la biblioteca `jszip` recoge todos estos archivos (mesh.obj, materiales.mtl, imágenes.png) generados en memoria y los comprime en un fichero `.zip`.
 
 El proceso de descarga se realiza mediante la API nativa del navegador para los Blobs: se instancia un `Blob` a partir de la salida proporcionada por los analizadores gramaticales (parsers), se genera una URL temporal usando `URL.createObjectURL(blob)`, y luego se dispara de form programática un click en un elemento `<a>` ficticio. Este elemento tiene seteado el atributo `download` para que el navegador ofrezca automáticamente la pantalla de descarga.
+
+Adicionalmente, para evitar fallos intermitentes del selector al exportar:
+- el guardado protege contra llamadas concurrentes (si ya hay un diálogo abierto, no abre otro simultáneo),
+- y si el diálogo nativo de escritorio falla al abrirse, hace fallback automático a descarga directa del navegador/webview en lugar de perder la exportación.

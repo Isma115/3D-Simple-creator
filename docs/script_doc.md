@@ -11,8 +11,9 @@ Hace lo siguiente:
 - Crea el estado compartido y los gestores de puntos, bloques, caras, grafos, undo/redo, limpieza, texturas, UV, FPS, importación y proyectos.
 - Registra el punto de origen inicial para el sistema de líneas y caras.
 - Conecta teclado, selección con ratón, controles de bloques con ratón y menú contextual de bloques.
-- Mantiene una función `updateUI()` que recalcula vértices visibles, sincroniza el panel superior y habilita o deshabilita acciones de selección y texturas.
+- Mantiene una función `updateUI()` que recalcula vértices visibles, sincroniza el panel superior y habilita o deshabilita acciones de selección y texturas. También oculta el cursor de edición en modos de bloque (`blocks-keyboard`, `blocks-mouse`, `blocks-pixel`).
 - Escucha acciones del menú nativo o HTML para limpiar, fusionar, abrir `Editar UV`, exportar, guardar proyecto y cargar modelos o proyectos.
+- Deja que `src/ui.js` gestione directamente las acciones nativas de carga (`Cargar proyecto`, `OBJ`, `FBX`) para evitar disparos duplicados de selectores.
 - Antes de exportar, reutiliza el mismo limpiador de líneas sin cara para no sacar geometría auxiliar al archivo final.
 - Usa `createModelImporter(...)` para vaciar el modelo actual y reconstruirlo con las mallas importadas.
 - Usa `createProjectIO(...)` para guardar un snapshot editable completo y restaurarlo después.

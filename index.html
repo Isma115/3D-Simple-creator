@@ -129,10 +129,27 @@
     <div id="ui-actions" class="actions-panel">
       <div class="control-panel">
         <div class="control-title">Tipo de control</div>
-        <label class="radio-option">
-          <input type="radio" name="control-mode" value="lines">
-          <span>Lineas</span>
-        </label>
+        <div class="radio-option-group" data-control-advanced="lines">
+          <label class="radio-option">
+            <input type="radio" name="control-mode" value="lines">
+            <span>Lineas</span>
+          </label>
+          <div id="line-border-controls" class="control-subpanel" hidden>
+            <label class="range-option compact">
+              <span>Radio borde</span>
+              <div class="control-inline-group">
+                <input
+                  type="number"
+                  id="border-radius-input"
+                  min="0.05"
+                  step="0.05"
+                  value="0.5"
+                  inputmode="decimal"
+                >
+              </div>
+            </label>
+          </div>
+        </div>
         <label class="radio-option">
           <input type="radio" name="control-mode" value="blocks-keyboard" checked>
           <span>Bloques (teclado)</span>
@@ -141,6 +158,38 @@
           <input type="radio" name="control-mode" value="blocks-mouse">
           <span>Bloques (raton)</span>
         </label>
+        <div class="radio-option-group" data-control-advanced="blocks-pixel">
+          <label class="radio-option">
+            <input type="radio" name="control-mode" value="blocks-pixel">
+            <span>Picel</span>
+          </label>
+          <div id="pixel-controls" class="control-subpanel" hidden>
+            <label class="range-option compact">
+              <span>Matriz</span>
+              <div class="control-inline-group">
+                <input
+                  type="number"
+                  id="pixel-brush-size-input"
+                  min="1"
+                  max="24"
+                  step="1"
+                  value="1"
+                  inputmode="numeric"
+                >
+              </div>
+            </label>
+            <label class="range-option compact">
+              <span>Traza</span>
+              <div class="control-inline-group">
+                <select id="pixel-trace-type-select">
+                  <option value="square" selected>Cuadrado</option>
+                  <option value="circle">Circulo</option>
+                  <option value="diamond">Rombo</option>
+                </select>
+              </div>
+            </label>
+          </div>
+        </div>
         <label class="radio-option">
           <input type="radio" name="control-mode" value="select-face">
           <span>Seleccionar cara</span>
@@ -177,7 +226,7 @@
         <div class="help-line">Izq arrastrar: girar</div>
         <div class="help-line">Der arrastrar: mover</div>
         <div class="help-line">Rueda: zoom</div>
-        <div class="help-line">Ctrl + rueda: modo</div>
+        <div class="help-line">Ctrl/Mayus + rueda: modo</div>
       </div>
       <div class="editor-help-mode">
         <strong id="editor-help-mode-title">Bloques (teclado)</strong>
@@ -219,6 +268,26 @@
               <span id="quick-texture-offset-y-value" class="range-value">0.00</span>
             </div>
           </label>
+          <button id="quick-texture-advanced-toggle" class="action-button secondary small texture-transform-toggle" type="button">
+            Mostrar ajuste avanzado
+          </button>
+          <div id="quick-texture-advanced" class="texture-transform-advanced" hidden>
+            <div class="texture-transform-title">Escala y rotacion</div>
+            <label class="range-option compact">
+              <span>Escala</span>
+              <div class="control-inline-group">
+                <input type="range" id="quick-texture-scale" min="0.1" max="4" step="0.01" value="1">
+                <span id="quick-texture-scale-value" class="range-value">1.00</span>
+              </div>
+            </label>
+            <label class="range-option compact">
+              <span>Rot.</span>
+              <div class="control-inline-group">
+                <input type="range" id="quick-texture-rotation" min="-180" max="180" step="1" value="0">
+                <span id="quick-texture-rotation-value" class="range-value">0°</span>
+              </div>
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -227,7 +296,7 @@
   <div id="control-mode-toast" class="control-mode-toast" aria-live="polite" aria-hidden="true">
     <span class="control-mode-toast-label">Tipo de control</span>
     <strong id="control-mode-toast-value">Lineas</strong>
-    <span class="control-mode-toast-hint">Ctrl + rueda del raton</span>
+    <span class="control-mode-toast-hint">Ctrl o Mayus + rueda</span>
   </div>
 
   <div id="texture-modal" class="modal-backdrop" style="display: none;">
@@ -278,7 +347,7 @@
             <p class="panel-hint">Usa "Seleccionar cara" si quieres texturizar solo una parte concreta. Si eliges "Modelo completo", la textura y el editor UV actuarán sobre toda la malla disponible.</p>
           </div>
           <div class="texture-upload-row">
-            <input type="file" id="texture-upload-input" accept=".png,.apng,.jpg,.jpeg,.jpe,.jfif,.pjpeg,.pjp,.webp,.avif,.gif,.bmp,.dib,.svg,.svgz,.ico,.cur,.tif,.tiff,.heic,.heif,.qoi,.tga,.pnm,.pbm,.pgm,.ppm,.pam,image/*" style="display: none;">
+            <input type="file" id="texture-upload-input" accept="image/*,*/*" style="display: none;">
             <button id="texture-upload-btn" class="action-button secondary" type="button">Cargar Textura</button>
           </div>
           <div id="texture-list" class="texture-list texture-list-grid">
@@ -324,7 +393,7 @@
 
   <!-- Main logic -->
   <input type="file" id="model-import-input" accept=".obj,.fbx" style="display: none;">
-  <input type="file" id="project-import-input" accept=".s3dc,application/json" style="display: none;">
+  <input type="file" id="project-import-input" accept=".s3dc,.json,application/json,text/plain,*/*" style="display: none;">
   <script type="module" src="script.js"></script>
 </body>
 </html>

@@ -381,16 +381,9 @@ function blobToDataUrl(blob) {
     });
 }
 
-async function save(blob, filename, fileType = 'Archivos (*.*)') {
-    if (window.pywebview?.api?.save_export_file) {
-        const dataUrl = await blobToDataUrl(blob);
-        const result = await window.pywebview.api.save_export_file(dataUrl, filename, fileType);
-        if (result?.saved || result?.cancelled) {
-            return;
-        }
-        throw new Error(result?.error ?? 'No se pudo guardar el archivo exportado.');
-    }
+let saveDialogInProgress = false;
 
+async function saveWithBrowserDownload(blob, filename) {
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.style.display = 'none';
@@ -400,6 +393,44 @@ async function save(blob, filename, fileType = 'Archivos (*.*)') {
     link.click();
     document.body.removeChild(link);
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
+async function save(blob, filename, fileType = 'Archivos (*.*)') {
+    if (saveDialogInProgress) {
+        throw new Error('Ya hay un guardado o exportacion en curso.');
+    }
+
+    saveDialogInProgress = true;
+    if (window.pywebview?.api?.save_export_file) {
+        try {
+            const dataUrl = await blobToDataUrl(blob);
+            let lastError = null;
+
+            for (let attempt = 0; attempt < 2; attempt += 1) {
+                try {
+                    const result = await window.pywebview.api.save_export_file(dataUrl, filename, fileType);
+                    if (result?.saved || result?.cancelled) {
+                        return;
+                    }
+                    lastError = new Error(result?.error ?? 'No se pudo abrir el selector de guardado.');
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            console.warn('Fallo en dialogo nativo de guardado, usando descarga directa.', lastError);
+            await saveWithBrowserDownload(blob, filename);
+            return;
+        } finally {
+            saveDialogInProgress = false;
+        }
+    }
+
+    try {
+        await saveWithBrowserDownload(blob, filename);
+    } finally {
+        saveDialogInProgress = false;
+    }
 }
 
 function createExportGroup(state, blockManager) {

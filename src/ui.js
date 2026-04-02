@@ -27,6 +27,11 @@ export function createUI() {
     const editorHelpModeShortcuts = document.getElementById('editor-help-mode-shortcuts');
     const faceNeighborControls = document.getElementById('face-neighbor-controls');
     const faceNeighborDepthInput = document.getElementById('face-neighbor-depth-input');
+    const lineBorderControls = document.getElementById('line-border-controls');
+    const borderRadiusInput = document.getElementById('border-radius-input');
+    const pixelControls = document.getElementById('pixel-controls');
+    const pixelBrushSizeInput = document.getElementById('pixel-brush-size-input');
+    const pixelTraceTypeSelect = document.getElementById('pixel-trace-type-select');
     const geometryInputs = Array.from(document.querySelectorAll('input[name="geometry-type"]'));
     const geometryInventory = document.getElementById('geometry-inventory');
     const saveProjectButton = document.getElementById('save-project-button');
@@ -65,7 +70,7 @@ export function createUI() {
         lines: [
             'Click: trazar',
             'Shift + click: sumar',
-            'Click der.: unir'
+            'Click der.: unir/borde'
         ],
         'blocks-keyboard': [
             'WASD: mover cursor',
@@ -76,6 +81,11 @@ export function createUI() {
             'Click der.: colocar',
             'Click izq.: borrar',
             'Ctrl + D: dividir'
+        ],
+        'blocks-pixel': [
+            'Click: pintar',
+            'Click der.: borrar',
+            'N y traza: panel'
         ],
         'select-face': [
             'Click: elegir',
@@ -134,8 +144,37 @@ export function createUI() {
         modelImportInput.click();
     }
 
-    function openProjectImportDialog() {
+    function decodeBase64ToText(contentBase64) {
+        if (!contentBase64) return '';
+        const binary = window.atob(contentBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+        return new TextDecoder('utf-8').decode(bytes);
+    }
+
+    async function openProjectImportDialog() {
+        if (window.pywebview?.api?.open_project_file && projectImportHandler) {
+            try {
+                const result = await window.pywebview.api.open_project_file();
+                if (result?.opened && result?.contentBase64) {
+                    const projectName = result.name || 'proyecto_simple3d.s3dc';
+                    const projectText = decodeBase64ToText(result.contentBase64);
+                    const file = new File([projectText], projectName, { type: 'application/json' });
+                    projectImportHandler({ file });
+                    return;
+                }
+                if (result?.cancelled) {
+                    return;
+                }
+            } catch (error) {
+                console.error('No se pudo abrir el selector nativo de proyectos:', error);
+            }
+        }
+
         if (!projectImportInput) return;
+        projectImportInput.accept = '.s3dc,.json,application/json,text/plain,*/*';
         projectImportInput.value = '';
         projectImportInput.click();
     }
@@ -300,6 +339,12 @@ export function createUI() {
             const showNeighborControls = value === 'select-face-neighbors';
             faceNeighborControls.hidden = !showNeighborControls;
         }
+        if (lineBorderControls) {
+            lineBorderControls.hidden = value !== 'lines';
+        }
+        if (pixelControls) {
+            pixelControls.hidden = value !== 'blocks-pixel';
+        }
         if (editorHelpModeTitle) {
             editorHelpModeTitle.textContent = getControlModeLabel(value);
         }
@@ -434,6 +479,37 @@ export function createUI() {
         });
     }
 
+    if (borderRadiusInput) {
+        borderRadiusInput.addEventListener('input', () => {
+            const parsed = Number.parseFloat(borderRadiusInput.value);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                borderRadiusInput.value = '0.5';
+            }
+        });
+    }
+
+    if (pixelBrushSizeInput) {
+        pixelBrushSizeInput.addEventListener('input', () => {
+            const parsed = Number.parseInt(pixelBrushSizeInput.value, 10);
+            if (!Number.isFinite(parsed) || parsed < 1) {
+                pixelBrushSizeInput.value = '1';
+                return;
+            }
+            if (parsed > 24) {
+                pixelBrushSizeInput.value = '24';
+            }
+        });
+    }
+
+    if (pixelTraceTypeSelect) {
+        pixelTraceTypeSelect.addEventListener('change', () => {
+            const validValues = new Set(['square', 'circle', 'diamond']);
+            if (!validValues.has(pixelTraceTypeSelect.value)) {
+                pixelTraceTypeSelect.value = 'square';
+            }
+        });
+    }
+
     if (toggleEditorHelpButton) {
         bindMenuAction(toggleEditorHelpButton, toggleEditorHelpVisibility);
     }
@@ -488,7 +564,8 @@ export function createUI() {
     });
 
     window.addEventListener('wheel', (event) => {
-        if (!event.ctrlKey || event.altKey || event.metaKey) return;
+        const hasModeModifier = event.ctrlKey || event.shiftKey;
+        if (!hasModeModifier || event.altKey || event.metaKey) return;
         if (isTextureManagerVisible()) return;
         if (controlModeInputs.length === 0 || !controlModeChangeHandler) return;
 

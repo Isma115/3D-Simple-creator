@@ -40,7 +40,7 @@ export function createEntryManager(scene, planeFill) {
         }
         const scale = entry.selected || entry.multiSelected ? SELECT_SCALE : entry.hovered ? HOVER_SCALE : 1;
         entry.mesh.scale.setScalar(scale);
-        entry.mesh.visible = entry.active && pointsEnabled;
+        entry.mesh.visible = entry.active && pointsEnabled && canShow;
     }
 
     function refreshEntryVisibility(entry) {

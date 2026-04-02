@@ -8,6 +8,7 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     const mouse = new THREE.Vector2();
     const CLICK_THRESHOLD_PX = 6;
     const DOUBLE_CLICK_DELAY_MS = 350;
+    const UNIFORM_SCALE_SENSITIVITY = 0.22;
     let currentEntry = null;
     let pointerState = null;
     let lastClickInfo = null;
@@ -31,6 +32,16 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     resizeAction.textContent = 'Redimensionar';
     menu.appendChild(resizeAction);
 
+    const selectHorizontalRowAction = document.createElement('button');
+    selectHorizontalRowAction.type = 'button';
+    selectHorizontalRowAction.textContent = 'Seleccionar fila vecina (horizontal)';
+    menu.appendChild(selectHorizontalRowAction);
+
+    const selectVerticalRowAction = document.createElement('button');
+    selectVerticalRowAction.type = 'button';
+    selectVerticalRowAction.textContent = 'Seleccionar fila vecina (vertical)';
+    menu.appendChild(selectVerticalRowAction);
+
     document.body.appendChild(menu);
 
     const transformControl = new TransformControls(camera, renderer.domElement);
@@ -40,11 +51,34 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     transformControl.addEventListener('objectChange', () => {
         if (!transformingEntry) return;
         if (transformMode !== 'scale') return;
-        const baseSize = transformingEntry.mesh.geometry.boundingBox?.getSize(new THREE.Vector3()) ?? new THREE.Vector3(1, 1, 1);
+
+        if (transformControl.axis === 'XYZ' && transformStartScale) {
+            const rawUniformScale = (
+                transformingEntry.mesh.scale.x
+                + transformingEntry.mesh.scale.y
+                + transformingEntry.mesh.scale.z
+            ) / 3;
+            const startUniformScale = (
+                transformStartScale.x
+                + transformStartScale.y
+                + transformStartScale.z
+            ) / 3;
+            const adjustedUniformScale = Math.max(
+                0.02,
+                startUniformScale + ((rawUniformScale - startUniformScale) * UNIFORM_SCALE_SENSITIVITY)
+            );
+            transformingEntry.mesh.scale.set(adjustedUniformScale, adjustedUniformScale, adjustedUniformScale);
+        }
+
+        const baseSize = scaleBaseDimensions ?? transformingEntry.dimensions ?? new THREE.Vector3(1, 1, 1);
+        const startScale = transformStartScale ?? new THREE.Vector3(1, 1, 1);
+        const scaleRatioX = Math.abs(startScale.x) > 1e-8 ? transformingEntry.mesh.scale.x / startScale.x : 1;
+        const scaleRatioY = Math.abs(startScale.y) > 1e-8 ? transformingEntry.mesh.scale.y / startScale.y : 1;
+        const scaleRatioZ = Math.abs(startScale.z) > 1e-8 ? transformingEntry.mesh.scale.z / startScale.z : 1;
         transformingEntry.dimensions = new THREE.Vector3(
-            Math.abs(baseSize.x * transformingEntry.mesh.scale.x),
-            Math.abs(baseSize.y * transformingEntry.mesh.scale.y),
-            Math.abs(baseSize.z * transformingEntry.mesh.scale.z)
+            Math.abs(baseSize.x * scaleRatioX),
+            Math.abs(baseSize.y * scaleRatioY),
+            Math.abs(baseSize.z * scaleRatioZ)
         );
     });
     scene.add(transformControl);
@@ -54,6 +88,9 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     let positionBeforeDisplace = null;
     let dimensionsBeforeTransform = null;
     let sizeBeforeTransform = null;
+    let scaleBaseDimensions = null;
+    let transformStartScale = null;
+    const WORLD_AXES = ['x', 'y', 'z'];
 
     function getTargetEntries(preferredEntry = null, { hoveredFirst = false } = {}) {
         const selectedEntries = blockManager.getSelectedEntries().filter((entry) => entry?.active);
@@ -75,6 +112,96 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         if (splitResults.length === 0) return null;
         const selectedResult = splitResults.find((result) => result.parent === state.selectedBlock);
         return selectedResult ?? splitResults[splitResults.length - 1];
+    }
+
+    function pickAxisFromVector(vector, excludedAxes = []) {
+        const rankedAxes = WORLD_AXES
+            .map((axis) => ({ axis, value: Math.abs(vector[axis]) }))
+            .sort((left, right) => right.value - left.value);
+        for (const axisData of rankedAxes) {
+            if (!excludedAxes.includes(axisData.axis)) {
+                return axisData.axis;
+            }
+        }
+        return rankedAxes[0]?.axis ?? 'x';
+    }
+
+    function getCameraRowAxes() {
+        const rightVector = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+        const upVector = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+        const horizontalAxis = pickAxisFromVector(rightVector);
+        const verticalAxis = pickAxisFromVector(upVector, [horizontalAxis]);
+        return { horizontalAxis, verticalAxis };
+    }
+
+    function getEntryAxisSize(entry, axis) {
+        if (entry?.dimensions?.isVector3) {
+            return Math.max(Math.abs(entry.dimensions[axis]), 1e-4);
+        }
+        return Math.max(Math.abs(entry?.size ?? 1), 1e-4);
+    }
+
+    function buildContiguousRow(entry, rowAxis) {
+        if (!entry?.active || entry.geometryType !== 'cube') return [];
+
+        const entrySize = getEntryAxisSize(entry, rowAxis);
+        const crossAxes = WORLD_AXES.filter((axis) => axis !== rowAxis);
+        const positionTolerance = entrySize * 0.25;
+        const allEntries = (blockManager.getActiveBlockEntries
+            ? blockManager.getActiveBlockEntries()
+            : blockManager.getBlockEntries().filter((candidate) => candidate?.active))
+            .filter((candidate) => candidate.geometryType === 'cube');
+
+        const rowCandidates = allEntries.filter((candidate) => (
+            Math.abs(candidate.position[crossAxes[0]] - entry.position[crossAxes[0]]) <= positionTolerance
+            && Math.abs(candidate.position[crossAxes[1]] - entry.position[crossAxes[1]]) <= positionTolerance
+        ));
+        if (rowCandidates.length === 0) return [entry];
+
+        const candidateByIndex = new Map();
+        for (const candidate of rowCandidates) {
+            const index = Math.round((candidate.position[rowAxis] - entry.position[rowAxis]) / entrySize);
+            const current = candidateByIndex.get(index);
+            if (!current) {
+                candidateByIndex.set(index, candidate);
+                continue;
+            }
+            const currentDistance = Math.abs(current.position[rowAxis] - (entry.position[rowAxis] + (index * entrySize)));
+            const candidateDistance = Math.abs(candidate.position[rowAxis] - (entry.position[rowAxis] + (index * entrySize)));
+            if (candidateDistance < currentDistance) {
+                candidateByIndex.set(index, candidate);
+            }
+        }
+
+        const selected = [];
+        const centerCandidate = candidateByIndex.get(0) ?? entry;
+        selected.push(centerCandidate);
+
+        for (let index = -1; candidateByIndex.has(index); index -= 1) {
+            selected.push(candidateByIndex.get(index));
+        }
+        for (let index = 1; candidateByIndex.has(index); index += 1) {
+            selected.push(candidateByIndex.get(index));
+        }
+
+        return selected.filter((candidate, index, list) => list.indexOf(candidate) === index);
+    }
+
+    function selectNeighborRowByCamera(entry, direction = 'horizontal') {
+        if (!entry?.active || entry.geometryType !== 'cube') return false;
+
+        const { horizontalAxis, verticalAxis } = getCameraRowAxes();
+        const axis = direction === 'vertical' ? verticalAxis : horizontalAxis;
+        const rowSelection = buildContiguousRow(entry, axis);
+        if (rowSelection.length === 0) return false;
+
+        blockManager.setSelection(rowSelection, entry);
+        state.currentPosition.copy(entry.position);
+        state.cursorMesh.position.copy(state.currentPosition);
+        state.pathPoints = [state.currentPosition.clone()];
+        onUpdate();
+        hideMenu();
+        return true;
     }
 
     function finishTransform() {
@@ -104,6 +231,8 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
             transformingEntry = null;
             dimensionsBeforeTransform = null;
             sizeBeforeTransform = null;
+            scaleBaseDimensions = null;
+            transformStartScale = null;
             positionBeforeDisplace = null;
             transformMode = 'translate';
             return;
@@ -125,6 +254,8 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         positionBeforeDisplace = null;
         dimensionsBeforeTransform = null;
         sizeBeforeTransform = null;
+        scaleBaseDimensions = null;
+        transformStartScale = null;
         transformMode = 'translate';
     }
 
@@ -139,7 +270,11 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         }
         if (event.code !== 'KeyD') return;
         if (state.workMode !== 'classic') return;
-        if (state.controlMode !== 'blocks-keyboard' && state.controlMode !== 'blocks-mouse') return;
+        if (
+            state.controlMode !== 'blocks-keyboard'
+            && state.controlMode !== 'blocks-mouse'
+            && state.controlMode !== 'blocks-pixel'
+        ) return;
 
         const targets = getTargetEntries(null, { hoveredFirst: true });
         if (targets.length === 0) return;
@@ -223,9 +358,10 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
     }
 
     function pickBlockEntry() {
-        const entries = blockManager.getBlockEntries().filter((entry) => entry.active);
-        if (entries.length === 0) return null;
-        const meshes = entries.map((entry) => entry.mesh);
+        const meshes = blockManager.getActiveBlockMeshes
+            ? blockManager.getActiveBlockMeshes()
+            : blockManager.getBlockEntries().filter((entry) => entry.active).map((entry) => entry.mesh);
+        if (meshes.length === 0) return null;
         raycaster.setFromCamera(mouse, camera);
         const hits = raycaster.intersectObjects(meshes, false);
         if (hits.length === 0) return null;
@@ -266,7 +402,13 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         positionBeforeDisplace = entry.position.clone();
         dimensionsBeforeTransform = entry.dimensions.clone();
         sizeBeforeTransform = entry.size ?? null;
+        scaleBaseDimensions = entry.dimensions.clone();
+        transformStartScale = entry.mesh.scale.clone();
         transformControl.setMode(mode);
+        transformControl.setSpace(mode === 'scale' ? 'local' : 'world');
+        transformControl.showX = true;
+        transformControl.showY = true;
+        transformControl.showZ = true;
         transformControl.attach(entry.mesh);
     }
 
@@ -285,6 +427,9 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
         }
         mergeAction.disabled = mergeableTargets.length < 2;
         resizeAction.disabled = !entry?.active;
+        const rowSelectionDisabled = !entry?.active || entry?.geometryType !== 'cube';
+        selectHorizontalRowAction.disabled = rowSelectionDisabled;
+        selectVerticalRowAction.disabled = rowSelectionDisabled;
         menu.style.left = `${x}px`;
         menu.style.top = `${y}px`;
         menu.style.display = 'block';
@@ -400,8 +545,19 @@ export function attachBlockContextMenu({ scene, camera, renderer, controls, stat
 
     resizeAction.addEventListener('click', () => {
         if (!currentEntry) return;
+        const targetEntry = currentEntry;
         hideMenu();
-        startTransform(currentEntry, 'scale');
+        startTransform(targetEntry, 'scale');
+    });
+
+    selectHorizontalRowAction.addEventListener('click', () => {
+        if (!currentEntry) return;
+        selectNeighborRowByCamera(currentEntry, 'horizontal');
+    });
+
+    selectVerticalRowAction.addEventListener('click', () => {
+        if (!currentEntry) return;
+        selectNeighborRowByCamera(currentEntry, 'vertical');
     });
 
     renderer.domElement.addEventListener('pointerdown', beginPointerInteraction);

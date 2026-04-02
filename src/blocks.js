@@ -211,11 +211,64 @@ export function createBlockManager({ scene, state, entryManager }) {
     const blockEntriesByKey = new Map();
     const meshToBlockEntry = new WeakMap();
     const blockVertexRefs = new Map();
+    const activeBlockEntries = [];
+    const activeBlockEntrySet = new Set();
+    const activeBlockMeshes = [];
+    const activeBlockMeshSet = new Set();
+    const outlineGeometryCache = new Map();
 
     const BASE_COLOR = COLORS.face;
     const ACTIVE_COLOR = COLORS.line;
     const ACTIVE_EMISSIVE = 0x331100;
     const OUTLINE_COLOR = 0xffffff;
+    const OUTLINE_DENSE_THRESHOLD = 512;
+    let denseOutlineMode = false;
+
+    function removeCachedValue(list, value) {
+        const index = list.indexOf(value);
+        if (index < 0) return;
+        list.splice(index, 1);
+    }
+
+    function shouldRenderOutline(entry) {
+        if (!entry?.active) return false;
+        if (entry.hovered || entry.selected) return true;
+        return !denseOutlineMode;
+    }
+
+    function refreshDenseOutlineMode() {
+        const nextDenseOutlineMode = activeBlockEntries.length > OUTLINE_DENSE_THRESHOLD;
+        if (nextDenseOutlineMode === denseOutlineMode) return;
+        denseOutlineMode = nextDenseOutlineMode;
+        for (const entry of activeBlockEntries) {
+            if (entry?.outline) {
+                entry.outline.visible = shouldRenderOutline(entry);
+            }
+        }
+    }
+
+    function syncActiveEntryCache(entry) {
+        if (!entry?.mesh) return;
+        const shouldBeActive = entry.active === true;
+
+        if (shouldBeActive && !activeBlockEntrySet.has(entry)) {
+            activeBlockEntrySet.add(entry);
+            activeBlockEntries.push(entry);
+        } else if (!shouldBeActive && activeBlockEntrySet.has(entry)) {
+            activeBlockEntrySet.delete(entry);
+            removeCachedValue(activeBlockEntries, entry);
+        }
+
+        if (shouldBeActive && !activeBlockMeshSet.has(entry.mesh)) {
+            activeBlockMeshSet.add(entry.mesh);
+            activeBlockMeshes.push(entry.mesh);
+        } else if (!shouldBeActive && activeBlockMeshSet.has(entry.mesh)) {
+            activeBlockMeshSet.delete(entry.mesh);
+            removeCachedValue(activeBlockMeshes, entry.mesh);
+        }
+
+        refreshDenseOutlineMode();
+    }
 
     function addEntryToScene(entry) {
         if (!entry.inScene) {
@@ -238,8 +291,20 @@ export function createBlockManager({ scene, state, entryManager }) {
         return point;
     }
 
+    function getOutlineGeometry(geometry) {
+        if (!geometry?.uuid) {
+            return new THREE.EdgesGeometry(geometry);
+        }
+        let edges = outlineGeometryCache.get(geometry.uuid);
+        if (!edges) {
+            edges = new THREE.EdgesGeometry(geometry);
+            outlineGeometryCache.set(geometry.uuid, edges);
+        }
+        return edges;
+    }
+
     function createBlockOutline(geometry) {
-        const edges = new THREE.EdgesGeometry(geometry);
+        const edges = getOutlineGeometry(geometry);
         const outline = new THREE.LineSegments(
             edges,
             new THREE.LineBasicMaterial({
@@ -395,19 +460,20 @@ export function createBlockManager({ scene, state, entryManager }) {
         });
         if (entry.outline?.material) {
             entry.outline.material.color.setHex(useActive ? ACTIVE_COLOR : OUTLINE_COLOR);
-            entry.outline.visible = entry.active;
+            entry.outline.visible = shouldRenderOutline(entry);
         }
         entry.mesh.visible = entry.active;
     }
 
     function refreshEntryVisibility(entry) {
         syncBlockVertices(entry);
-        updateAppearance(entry);
         if (!entry.active) {
             removeEntryFromScene(entry);
-            return;
+        } else {
+            addEntryToScene(entry);
         }
-        addEntryToScene(entry);
+        syncActiveEntryCache(entry);
+        updateAppearance(entry);
     }
 
     function isPointInsideBlock(point, entry) {
@@ -653,6 +719,14 @@ export function createBlockManager({ scene, state, entryManager }) {
 
     function getBlockEntries() {
         return blockEntries;
+    }
+
+    function getActiveBlockEntries() {
+        return activeBlockEntries;
+    }
+
+    function getActiveBlockMeshes() {
+        return activeBlockMeshes;
     }
 
     function getBlockByMesh(mesh) {
@@ -1712,6 +1786,8 @@ export function createBlockManager({ scene, state, entryManager }) {
         removeFromSelection,
         toggleSelection,
         getBlockEntries,
+        getActiveBlockEntries,
+        getActiveBlockMeshes,
         getBlockByMesh,
         getBlockByKey,
         canSplitBlock,

@@ -172,17 +172,53 @@ No debo marcar tareas como COMPLETADA de forma autónoma, solo el usuario podrá
 
 [COMPLETADA] La funcionalidad de caras vecinas no recoge solamente una cara de la figura, sino que si por ejemplo tengo un bloque conjunto (fusionado), va a seleccionar todas sus caras, quiero que solo seleccione la cara en la que se ha pulsado
 
-[TAREA] Construye un programa dentro de este mismo directorio (VisorModelos) que permita visualizar modelos de cualquier formato obj, fbx, glb, etc. que tenga una interfaz sencilla y limpia, con un botón para cargar el modelo.
+[COMPLETADA] Construye un programa dentro de este mismo directorio (VisorModelos) que permita visualizar modelos de cualquier formato obj, fbx, glb, etc. que tenga una interfaz sencilla y limpia, con un botón para cargar el modelo.
 
-[TAREA] Al momento de tener seleccionada alguna figura o cara, etc, no se puede deseleccionar cuando arrastro por la pantalla, solamente al pulsar click izquierdo en cualquier sitio ya si se deseleccionará.
+[COMPLETADA] Al momento de tener seleccionada alguna figura o cara, etc, no se puede deseleccionar cuando arrastro por la pantalla, solamente al pulsar click izquierdo en cualquier sitio ya si se deseleccionará.
 
+[COMPLETADA] Los controles que aparecen al momento de pulsar click derecho, tienen que aparecer uno encima del otro en lugar de uno al lado del otro
 
+[COMPLETADA] Cuando se tiene seleccionada la cara de una figura no se puede deseleccionar cuando arrastro por la pantalla, el error persiste, la cara se sigue deseleccionando al momento de arrastrar
 
+[COMPLETADA] La función de redimensionar tiene que activar en la figura seleccionada la misma función que la de mover, pero en lugar de flechas en cada eje serán cubitos (como en blender cuando se quiere redimensionar un bloque) y puedes tirar sobre cada uno de los ejes para amplair la figura, y también tiene que haber un cubito en el centro que permita ampliar o reducir el tamaño de la figura en todos los ejes a la vez.
 
+[COMPLETADA] Añade dos nuevos controles al momento de hacer click derecho sobre una de las figuras que sean "Seleccionar todos (horizontal)" y "Seleccionar todos (vertical)", la primera opción seleccionara todas las caras de la figura que estén en contacto con la cara seleccionada en el eje horizontal, y la segunda opción seleccionara todas las caras de la figura que estén en contacto con la cara seleccionada en el eje vertical.
 
-[TAREA] La función de redimensionar tiene que activar en la figura seleccionada la misma función que la de mover, pero en lugar de flechas en cada eje serán cubitos (como en blender cuando se quiere redimensionar un bloque) y puedes tirar sobre cada uno de los ejes para amplair la figura, y también tiene que haber un cubito en el centro que permita ampliar o reducir el tamaño de la figura en todos los ejes a la vez.
+[COMPLETADA] No permite cargar proyectos s3dc, el selector de fichero no permite cargar ficheros s3dc, permite guardar el proyecto y el trabajo realizado pero no permite cargarlo, corrige esto
 
+[COMPLETADA] Lee la imagen imgs/image1.png e intenta colocar los menús de Archivo y Editar los primeros, por delante de los menús por defecto de Python, aunque si puedes eliminar los menús de Python mejor todavía
 
+[COMPLETADA] Muchos ficheros de imagen no son permitidos en el selector de ficheros al momento de querer seleccionar una textura, lista primero todos los posibles tipos de imagen permitidos y haz que se pueda importar texturas de cualquier formato de imagen
+
+[COMPLETADA] Permite que las texturas aplicadas se puedan alejar o acercar (si se alejan que se repitan) y que se pueda rotar la textura (pero esto en un menú oculto cerca de los sliders de desplazamiento horizontal o vertical)
+
+[COMPLETADA] Lee la imagen imgs/image2.png y mientras que no haya ninguna cara con textura seleccionada, no quiero que se muestre el menú que permite desplazar la textura, ni rotarla, ni moverla, etc
+
+[COMPLETADA] La función del cuadradito central para redimensionar toda la figura es demasiado sensible y se redimensiona al mínimo movimiento del ratón, quiero que sea menos sensible y que se pueda redimensionar con más precisión
+
+[COMPLETADA] Añade una opción al hacer click derecho sobre una de las figuras, añade una opción para seleccionar varios cubos vecinos en horizontal o vertical según la orientación de la cámara en una fila
+
+[COMPLETADA] Cambiar el tipo de control además con Ctrl + rueda, que también se pueda hacer con Mayus + rueda
+
+[COMPLETADA] Al tener varios bloques o figuras seleccionados al pulsar en la tecla x que se borren todos los seleccionados
+
+[COMPLETADA] La funcionalidad de redimensionar no funciona correctamente al intentar hacer que el modelo sea más alto o más estrecho, más ancho, a veces hace otra cosa diferente y la forma final no es la correcta
+
+[COMPLETADA] Corregir: [pywebview] SAVE_DIALOG is deprecated and will be removed in a future version. Use 'FileDialog.SAVE' instead.
+
+[COMPLETADA] Elimina los menús que pone Python por defecto que son "Python" "Edit" y "View"
+
+[COMPLETADA] Lee la imagen imgs/image3.png y quiero que añadas la funcionalidad "Crear borde" que al tener dos puntos seleccionados se creara un borde alrededor de los puntos seleccionados y se pueda seleccionar el radio del borde
+
+[COMPLETADA] Al momento de tener seleccionado el tipo de control ratón, quiero que al arrastrar manteniendo el click derecho, no quiero que se borre ni se coloque ningún bloque accidentalmente, solamente al hacer un click simple
+
+[COMPLETADA] Cuando tenga varias figuras o cubos seleccionados no quiero que al arrastrar con el click izquierdo no quiero que estos se deseleccionen
+
+[COMPLETADA] Sigue sin poderse cargarse archivos de proyecto s3dc, el selector de fichero no permite cargar ficheros s3dc, permite guardar el proyecto y el trabajo realizado pero no permite cargarlo
+
+[COMPLETADA] A veces el botón de exportar no funciona y no se despliega el selector de fichero, comprueba que puede ser el origen e intenta prevenirlo
+
+[COMPLETADA] Añade un nuevo tipo de control Picel que permita mediante el ratón al hacer click en lugar de colocar un bloque, que se coloquen un n número de bloques en forma de matriz 1x1, o 2x2, 3x3, 4x4 etc, y que se pueda cambiar el tamaño de la matriz con un número como parámetro (al igual que el control caras vecinas, que tiene un parámetro así) y como extra añade otro parámetro que sea un combobox que permita seleccionar el tipo de traza, cuadrado, círculo, ect. 
 
 Consulta la carpeta docs si necesitas información sobre el proyecto
 
